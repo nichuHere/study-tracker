@@ -117,7 +117,7 @@ git commit -m "Initial commit - Study Tracker"
 
 # Create a new repository on GitHub (github.com)
 # Then connect it:
-git remote add origin https://github.com/YOUR_USERNAME/study-tracker.git
+git remote add origin https://github.com/nichuHere/study-tracker.git
 git branch -M main
 git push -u origin main
 ```

@@ -1,0 +1,46 @@
+IMPORTANT: This folder needs to be inside a Create React App structure.
+
+Follow these steps to set up:
+
+METHOD 1 - Use Create React App (Recommended):
+============================================
+
+1. Open terminal/command prompt
+2. Navigate to where you want the project:
+   cd Desktop (or wherever you want)
+
+3. Create React app:
+   npx create-react-app study-tracker-final
+
+4. Go into the new folder:
+   cd study-tracker-final
+
+5. Copy these files from study-tracker-supabase into study-tracker-final:
+   - Copy src/lib/supabase.js → src/lib/supabase.js
+   - Copy src/components/StudyTracker.jsx → src/components/StudyTracker.jsx
+   - Copy .env.example → .env.example
+   - Copy supabase-schema.sql → supabase-schema.sql
+   - Copy package.json dependencies into your package.json
+
+6. Install Supabase:
+   npm install @supabase/supabase-js lucide-react
+
+7. Create .env.local file with your Supabase credentials
+
+8. Update src/App.js to use StudyTracker component
+
+9. Run: npm start
+
+
+METHOD 2 - Use the provided files directly:
+===========================================
+
+The files in this folder include the basic structure. You still need:
+
+1. Run: npx create-react-app my-app
+2. Copy all files from this folder into my-app
+3. Run: npm install
+4. Create .env.local
+5. Run: npm start
+
+The README.md file has complete step-by-step instructions!

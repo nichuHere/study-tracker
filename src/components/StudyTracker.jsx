@@ -8,7 +8,7 @@ const StudyTrackerApp = () => {
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileClass, setNewProfileClass] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [_loading, _setLoading] = useState(true);
   
   // Shared activities across all kids
   const [sharedActivities, setSharedActivities] = useState([]);
@@ -61,9 +61,9 @@ const StudyTrackerApp = () => {
     keyPoints: ''
   });
   const [examChapterInput, setExamChapterInput] = useState('');
-  const [editingExamChapter, setEditingExamChapter] = useState(null);
+  const [_editingExamChapter, _setEditingExamChapter] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
-  const [showEditExam, setShowEditExam] = useState(false);
+  const [_showEditExam, _setShowEditExam] = useState(false);
   const [newReminder, setNewReminder] = useState({
     title: '',
     date: '',
@@ -266,7 +266,7 @@ const StudyTrackerApp = () => {
     }
   };
 
-  const updateSharedActivity = async (id, field, value) => {
+  const _updateSharedActivity = async (id, field, value) => {
     try {
       const { error } = await supabase
         .from('shared_activities')
@@ -821,7 +821,7 @@ const StudyTrackerApp = () => {
   };
 
   // Calculate progress by subject
-  const getSubjectProgress = () => {
+  const _getSubjectProgress = () => {
     return subjects.map(subject => {
       const subjectTasks = tasks.filter(t => t.subject === subject.name);
       const completedTasks = subjectTasks.filter(t => t.completed).length;
@@ -874,7 +874,7 @@ const StudyTrackerApp = () => {
 
   // Get subject-wise analytics
   const getSubjectAnalytics = () => {
-    const last7Days = getLastNDays(7);
+    const _last7Days = getLastNDays(7);
     const subjectData = {};
 
     subjects.forEach(subject => {
@@ -931,7 +931,7 @@ const StudyTrackerApp = () => {
   // Get smart daily suggestions
   const getDailySuggestions = () => {
     const suggestions = [];
-    const today = new Date();
+    const _today = new Date();
     
     // Check for urgent exams (within 5 days) with pending chapters
     const urgentExams = exams.filter(exam => {

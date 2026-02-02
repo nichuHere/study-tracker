@@ -947,7 +947,7 @@ const StudyTrackerApp = () => {
     urgentExams.forEach(exam => {
       if (!exam.subjects || !Array.isArray(exam.subjects)) return;
       
-      exam.subjects.forEach((subject, subjectIndex) => {
+        exam.subjects.forEach((subject, _subjectIndex) => {
         const daysLeft = getDaysUntil(subject.date);
         if (daysLeft <= 5 && daysLeft >= 0) {
           const progress = getExamProgress(exam);

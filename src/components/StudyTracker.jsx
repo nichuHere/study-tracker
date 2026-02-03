@@ -2734,7 +2734,7 @@ const StudyTrackerApp = () => {
                               title={minimizedExams[exam.id] ? 'Expand exam' : 'Minimize exam'}
                             >
                               {minimizedExams[exam.id] ? (
-                                <Plus className="w-4 h-4" style={{ transform: 'rotate(45deg)' }} />
+                                <Plus className="w-4 h-4" style={{ transform: 'rotate(90deg)' }} />
                               ) : (
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -2858,13 +2858,22 @@ const StudyTrackerApp = () => {
                                               </button>
                                             </>
                                           ) : (
-                                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                                              chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                              chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
-                                              'bg-gray-100 text-gray-600'
-                                            }`}>
+                                            <button
+                                              onClick={() => {
+                                                const statuses = ['pending', 'started', 'completed'];
+                                                const currentIndex = statuses.indexOf(chapter.status);
+                                                const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+                                                updateChapterStatus(exam.id, subjectIdx, chapterIdx, nextStatus);
+                                              }}
+                                              className={`text-xs px-2 py-0.5 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${
+                                                chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-gray-100 text-gray-600'
+                                              }`}
+                                              title="Click to cycle through statuses"
+                                            >
                                               {chapter.status}
-                                            </span>
+                                            </button>
                                           )}
                                         </div>
                                       ))}

@@ -63,12 +63,26 @@ const StudyTrackerApp = () => {
   const [examChapterInput, setExamChapterInput] = useState('');
   const [_editingExamChapter, _setEditingExamChapter] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
+  const [minimizedExams, setMinimizedExams] = useState({});
   const [_showEditExam, _setShowEditExam] = useState(false);
   const [newReminder, setNewReminder] = useState({
     title: '',
     date: '',
     description: ''
   });
+  const [expandedReminders, setExpandedReminders] = useState({});
+  const [editingReminder, setEditingReminder] = useState(null);
+  const [editReminderData, setEditReminderData] = useState({ title: '', date: '', description: '' });
+  const [newRecurringReminder, setNewRecurringReminder] = useState({
+    title: '',
+    description: '',
+    time: '19:15',
+    end_time: '20:00',
+    days: [] // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+  });
+  const [showRecurringReminderForm, setShowRecurringReminderForm] = useState(false);
+  const [editingRecurringReminder, setEditingRecurringReminder] = useState(null);
+  const [recurringReminders, setRecurringReminders] = useState([]);
 
   // Load data from storage on mount
   useEffect(() => {
@@ -120,18 +134,20 @@ const StudyTrackerApp = () => {
   const loadProfileData = async (profileId) => {
     try {
       // Load data from Supabase
-      const [subjectsResult, tasksResult, examsResult, remindersResult, standardResult] = await Promise.all([
+      const [subjectsResult, tasksResult, examsResult, remindersResult, standardResult, recurringRemindersResult] = await Promise.all([
         supabase.from('subjects').select('*').eq('profile_id', profileId),
         supabase.from('tasks').select('*').eq('profile_id', profileId),
         supabase.from('exams').select('*').eq('profile_id', profileId),
         supabase.from('reminders').select('*').eq('profile_id', profileId),
-        supabase.from('standard_activities').select('*').eq('profile_id', profileId)
+        supabase.from('standard_activities').select('*').eq('profile_id', profileId),
+        supabase.from('recurring_reminders').select('*').eq('profile_id', profileId)
       ]);
 
       setSubjects(subjectsResult.data || []);
       setTasks(tasksResult.data || []);
       setExams(examsResult.data || []);
       setReminders(remindersResult.data || []);
+      setRecurringReminders(recurringRemindersResult.data || []);
       
       if (standardResult.data && standardResult.data.length > 0) {
         setStandardActivities(standardResult.data.map(item => item.activity));
@@ -775,7 +791,184 @@ const StudyTrackerApp = () => {
     }
   };
 
-  // Calculate days until exam
+  const startEditReminder = (reminder) => {
+    setEditingReminder(reminder.id);
+    setEditReminderData({
+      title: reminder.title,
+      date: reminder.date,
+      description: reminder.description
+    });
+  };
+
+  const saveEditReminder = async () => {
+    if (!editReminderData.title.trim() || !editReminderData.date) {
+      alert('Title and date are required');
+      return;
+    }
+
+    try {
+      await supabase
+        .from('reminders')
+        .update({
+          title: editReminderData.title,
+          date: editReminderData.date,
+          description: editReminderData.description
+        })
+        .eq('id', editingReminder);
+
+      const updatedReminders = reminders.map(r =>
+        r.id === editingReminder
+          ? { ...r, ...editReminderData }
+          : r
+      );
+      setReminders(updatedReminders);
+      setEditingReminder(null);
+    } catch (error) {
+      console.error('Error updating reminder:', error);
+      alert('Failed to update reminder');
+    }
+  };
+
+  // Get current date/time in IST (India Standard Time, UTC+5:30)
+  const getISTNow = () => {
+    const now = new Date();
+    const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    return istTime;
+  };
+
+  // Get today's day of week in IST (0=Sun, 1=Mon, ..., 6=Sat)
+  const getTodayDayOfWeekIST = () => {
+    return getISTNow().getDay();
+  };
+
+  // Get today's date in IST
+  const getTodayDateIST = () => {
+    const istDate = getISTNow();
+    return istDate.toISOString().split('T')[0];
+  };
+
+  // Convert 24-hour time format (HH:MM) to 12-hour AM/PM format
+  const convertTo12Hour = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    let hours12 = parseInt(hours);
+    const ampm = hours12 >= 12 ? 'PM' : 'AM';
+    hours12 = hours12 % 12 || 12;
+    return `${hours12}:${minutes} ${ampm}`;
+  };
+
+  // Add recurring reminder
+  const addRecurringReminder = async () => {
+    if (newRecurringReminder.title && newRecurringReminder.days.length > 0 && activeProfile) {
+      try {
+        const { data, error } = await supabase
+          .from('recurring_reminders')
+          .insert([{
+            profile_id: activeProfile.id,
+            title: newRecurringReminder.title,
+            description: newRecurringReminder.description || null,
+            time: newRecurringReminder.time,
+            end_time: newRecurringReminder.end_time,
+            days: newRecurringReminder.days // Array of day numbers
+          }])
+          .select();
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          setRecurringReminders([...recurringReminders, data[0]]);
+        }
+        
+        setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
+        setShowRecurringReminderForm(false);
+      } catch (error) {
+        console.error('Error adding recurring reminder:', error);
+        alert('Failed to add recurring reminder: ' + error.message);
+      }
+    }
+  };
+
+  // Get reminders for today (both one-time and recurring)
+  const getTodayReminders = () => {
+    const todayIST = getTodayDateIST();
+    const todayDayOfWeek = getTodayDayOfWeekIST();
+    
+    // One-time reminders for today
+    const oneTimeReminders = getUpcomingReminders().filter(r => 
+      r.date === todayIST
+    ).map(r => ({ ...r, isRecurring: false, isToday: true }));
+    
+    // Recurring reminders for today
+    const todayRecurringReminders = recurringReminders
+      .filter(r => r.days.includes(todayDayOfWeek))
+      .map(r => ({ ...r, isRecurring: true, isToday: true }));
+    
+    return [...oneTimeReminders, ...todayRecurringReminders];
+  };
+
+  // Delete recurring reminder
+  const deleteRecurringReminder = async (id) => {
+    try {
+      const { error } = await supabase
+        .from('recurring_reminders')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      const updated = recurringReminders.filter(r => r.id !== id);
+      setRecurringReminders(updated);
+    } catch (error) {
+      console.error('Error deleting recurring reminder:', error);
+    }
+  };
+
+  const startEditRecurringReminder = (reminder) => {
+    setEditingRecurringReminder(reminder.id);
+    setNewRecurringReminder({
+      title: reminder.title,
+      description: reminder.description,
+      time: reminder.time,
+      end_time: reminder.end_time || '20:00',
+      days: reminder.days
+    });
+    setShowRecurringReminderForm(true);
+  };
+
+  const saveEditRecurringReminder = async () => {
+    if (!newRecurringReminder.title.trim() || newRecurringReminder.days.length === 0) {
+      alert('Title and at least one day are required');
+      return;
+    }
+
+    try {
+      await supabase
+        .from('recurring_reminders')
+        .update({
+          title: newRecurringReminder.title,
+          description: newRecurringReminder.description,
+          time: newRecurringReminder.time,
+          end_time: newRecurringReminder.end_time,
+          days: newRecurringReminder.days
+        })
+        .eq('id', editingRecurringReminder);
+
+      const updatedReminders = recurringReminders.map(r =>
+        r.id === editingRecurringReminder
+          ? { ...r, ...newRecurringReminder }
+          : r
+      );
+      setRecurringReminders(updatedReminders);
+      setEditingRecurringReminder(null);
+      setShowRecurringReminderForm(false);
+      setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
+    } catch (error) {
+      console.error('Error updating recurring reminder:', error);
+      alert('Failed to update recurring reminder');
+    }
+  };
+
+    // Calculate days until exam
   const getDaysUntil = (dateString) => {
     const today = new Date();
     const examDate = new Date(dateString);
@@ -1737,12 +1930,21 @@ const StudyTrackerApp = () => {
             <div className="bg-white rounded-lg shadow-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-gray-800">School Reminders</h2>
-                <button
-                  onClick={() => setShowAddReminder(true)}
-                  className="text-indigo-600 hover:text-indigo-700"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowRecurringReminderForm(!showRecurringReminderForm)}
+                    className="text-xs px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 font-semibold"
+                    title="Recurring (e.g., Tuition every Mon/Wed/Thu)"
+                  >
+                    ↻ Recurring
+                  </button>
+                  <button
+                    onClick={() => setShowAddReminder(true)}
+                    className="text-indigo-600 hover:text-indigo-700"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               
               {showAddReminder && (
@@ -1787,34 +1989,234 @@ const StudyTrackerApp = () => {
                 </div>
               )}
               
+              {editingReminder ? (
+                <div className="mb-4 p-4 bg-indigo-50 rounded-lg space-y-3 border border-indigo-200">
+                  <h3 className="font-semibold text-gray-800">Edit Reminder</h3>
+                  <input
+                    type="text"
+                    placeholder="Reminder title"
+                    value={editReminderData.title}
+                    onChange={(e) => setEditReminderData({ ...editReminderData, title: e.target.value })}
+                    className="w-full p-2 border rounded-lg"
+                  />
+                  <input
+                    type="date"
+                    value={editReminderData.date}
+                    onChange={(e) => setEditReminderData({ ...editReminderData, date: e.target.value })}
+                    className="w-full p-2 border rounded-lg"
+                  />
+                  <textarea
+                    placeholder="Description (optional)"
+                    value={editReminderData.description}
+                    onChange={(e) => setEditReminderData({ ...editReminderData, description: e.target.value })}
+                    className="w-full p-2 border rounded-lg"
+                    rows="2"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveEditReminder}
+                      className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingReminder(null);
+                        setEditReminderData({ title: '', date: '', description: '' });
+                      }}
+                      className="px-4 bg-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              
               {getUpcomingReminders().length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No upcoming reminders</p>
               ) : (
                 <div className="space-y-2">
                   {getUpcomingReminders().map(reminder => (
-                    <div key={reminder.id} className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div key={reminder.id} className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors" onClick={() => setExpandedReminders({...expandedReminders, [reminder.id]: !expandedReminders[reminder.id]})}>
                       <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
                         <div className="font-medium text-gray-800">{reminder.title}</div>
                         <div className="text-sm text-gray-600">{new Date(reminder.date).toLocaleDateString()}</div>
                         {reminder.description && (
-                          <div className="text-sm text-gray-500 mt-1">{reminder.description}</div>
+                          <div className={`text-sm text-gray-500 mt-1 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? "" : "line-clamp-2"}`}>{reminder.description}{!expandedReminders[reminder.id] && <span className="text-indigo-600 font-semibold ml-1">... (click to expand)</span>}</div>
                         )}
                       </div>
-                      <button
-                        onClick={() => deleteReminder(reminder.id)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={(e) => {e.stopPropagation(); startEditReminder(reminder);}}
+                          className="text-blue-500 hover:text-blue-700"
+                          title="Edit"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={(e) => {e.stopPropagation(); deleteReminder(reminder.id);}}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
+                </div>
+              )}
+              
+              {showRecurringReminderForm && (
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3 border border-blue-200">
+                  <h3 className="font-semibold text-gray-800">{editingRecurringReminder ? 'Edit Recurring Reminder' : 'Add Recurring Reminder'}</h3>
+                  <input
+                    type="text"
+                    placeholder="Reminder title (e.g., Tuition, Sports class)"
+                    value={newRecurringReminder.title}
+                    onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, title: e.target.value })}
+                    className="w-full p-2 border rounded-lg"
+                  />
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-600 font-semibold block mb-1">Start Time</label>
+                      <input
+                        type="time"
+                        value={newRecurringReminder.time}
+                        onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, time: e.target.value })}
+                        className="w-full p-2 border rounded-lg"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-600 font-semibold block mb-1">End Time</label>
+                      <input
+                        type="time"
+                        value={newRecurringReminder.end_time}
+                        onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, end_time: e.target.value })}
+                        className="w-full p-2 border rounded-lg"
+                      />
+                    </div>
+                  </div>
+                  <textarea
+                    placeholder="Description (optional)"
+                    value={newRecurringReminder.description}
+                    onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, description: e.target.value })}
+                    className="w-full p-2 border rounded-lg"
+                    rows="2"
+                  />
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700">Select Days:</label>
+                    <div className="flex flex-wrap gap-2">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            const newDays = newRecurringReminder.days.includes(idx)
+                              ? newRecurringReminder.days.filter(d => d !== idx)
+                              : [...newRecurringReminder.days, idx];
+                            setNewRecurringReminder({ ...newRecurringReminder, days: newDays });
+                          }}
+                          className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                            newRecurringReminder.days.includes(idx)
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={editingRecurringReminder ? saveEditRecurringReminder : addRecurringReminder}
+                      className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
+                    >
+                      {editingRecurringReminder ? 'Save Changes' : 'Add Recurring Reminder'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowRecurringReminderForm(false);
+                        setEditingRecurringReminder(null);
+                        setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
+                      }}
+                      className="px-4 bg-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         )}
 
+
+            {/* Recurring Reminders */}
+            {recurringReminders.length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-6 mt-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  Recurring Reminders
+                  <span className="text-sm text-gray-600 font-normal">(Shows on scheduled days)</span>
+                </h2>
+                <div className="space-y-2">
+                  {recurringReminders.map(reminder => {
+                    const todayDayOfWeek = getTodayDayOfWeekIST();
+                    const isToday = reminder.days.includes(todayDayOfWeek);
+                    const daysText = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    const daysNames = reminder.days.map(d => daysText[d]).join(', ');
+                    
+                    return (
+                      <div 
+                        key={reminder.id} 
+                        className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                          isToday 
+                            ? 'bg-green-100 border-2 border-green-500 hover:bg-green-150' 
+                            : 'bg-blue-50 border border-blue-200 hover:bg-blue-100'
+                        }`}
+                        onClick={() => setExpandedReminders({...expandedReminders, [reminder.id]: !expandedReminders[reminder.id]})}
+                      >
+                        <div className="flex-shrink-0">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isToday ? 'bg-green-500 text-white' : 'bg-blue-400 text-white'
+                          }`}>
+                            ?
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-800">
+                            {reminder.title}
+                            {isToday && <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded">TODAY {convertTo12Hour(reminder.time)}-{convertTo12Hour(reminder.end_time)}</span>}
+                          </div>
+                          <div className="text-sm text-gray-600">{daysNames}</div>
+                          <div className="text-sm text-blue-600 font-medium">{convertTo12Hour(reminder.time)} - {convertTo12Hour(reminder.end_time)}</div>
+                          {reminder.description && (
+                            <div className={`text-sm text-gray-500 mt-1 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? '' : 'line-clamp-2'}`}>
+                              {reminder.description}
+                              {!expandedReminders[reminder.id] && <span className="text-blue-600 font-semibold ml-1">... (click to expand)</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => {e.stopPropagation(); startEditRecurringReminder(reminder);}}
+                            className="text-blue-500 hover:text-blue-700"
+                            title="Edit"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={(e) => {e.stopPropagation(); deleteRecurringReminder(reminder.id);}}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
         {/* Subjects View */}
         {activeView === 'subjects' && (
           <div className="bg-white rounded-lg shadow-lg p-6">
@@ -2324,6 +2726,22 @@ const StudyTrackerApp = () => {
                               </button>
                             )}
                             <button
+                              onClick={() => setMinimizedExams(prev => ({
+                                ...prev,
+                                [exam.id]: !prev[exam.id]
+                              }))}
+                              className="text-blue-600 hover:text-blue-700"
+                              title={minimizedExams[exam.id] ? 'Expand exam' : 'Minimize exam'}
+                            >
+                              {minimizedExams[exam.id] ? (
+                                <Plus className="w-4 h-4" style={{ transform: 'rotate(45deg)' }} />
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                                </svg>
+                              )}
+                            </button>
+                            <button
                               onClick={() => deleteExam(exam.id)}
                               className="text-red-500 hover:text-red-700"
                               title="Delete exam"
@@ -2334,7 +2752,7 @@ const StudyTrackerApp = () => {
                         </div>
 
                         {/* Overall Progress */}
-                        {progress.total > 0 && (
+                        {!minimizedExams[exam.id] && progress.total > 0 && (
                           <div className="mb-4 p-3 bg-white rounded-lg">
                             <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
                               <span className="font-semibold">Overall Progress</span>
@@ -2355,6 +2773,7 @@ const StudyTrackerApp = () => {
                         )}
 
                         {/* Subjects List */}
+                        {!minimizedExams[exam.id] && (
                         <div className="space-y-3">
                           {exam.subjects && exam.subjects.map((subject, subjectIdx) => {
                             const daysLeft = getDaysUntil(subject.date);
@@ -2545,6 +2964,152 @@ const StudyTrackerApp = () => {
                             );
                           })}
                         </div>
+                        )}
+
+                        {/* Add New Subject Section - Only visible when editing */}
+                        {editingExam === exam.id && (
+                          <div className="mt-4 p-4 bg-green-50 border-2 border-green-200 rounded-lg space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Plus className="w-4 h-4 text-green-600" />
+                              <span className="text-sm font-semibold text-gray-800">Add New Subject to This Exam</span>
+                            </div>
+                            
+                            <div className="space-y-3">
+                              <select
+                                value={newExamSubject.subject}
+                                onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value })}
+                                className="w-full p-2 border rounded-lg text-sm"
+                              >
+                                <option value="">Select a subject...</option>
+                                {subjects.map(s => (
+                                  <option key={s.id} value={s.name}>{s.name}</option>
+                                ))}
+                              </select>
+                              
+                              <input
+                                type="date"
+                                value={newExamSubject.date}
+                                onChange={(e) => setNewExamSubject({ ...newExamSubject, date: e.target.value })}
+                                className="w-full p-2 border rounded-lg text-sm"
+                                placeholder="Exam date"
+                              />
+                              
+                              <div>
+                                <label className="text-xs font-medium text-gray-600 block mb-2">Chapters:</label>
+                                
+                                {/* Quick select from subject's chapters */}
+                                {newExamSubject.subject && (() => {
+                                  const selectedSubject = subjects.find(s => s.name === newExamSubject.subject);
+                                  const availableChapters = selectedSubject?.chapters?.filter(
+                                    ch => !newExamSubject.chapters.some(ec => ec.name === ch)
+                                  ) || [];
+                                  
+                                  return availableChapters.length > 0 && (
+                                    <div className="mb-2">
+                                      <label className="text-xs text-gray-500 block mb-1">Quick add from {newExamSubject.subject}:</label>
+                                      <select
+                                        onChange={(e) => {
+                                          if (e.target.value) {
+                                            setNewExamSubject({
+                                              ...newExamSubject,
+                                              chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending' }]
+                                            });
+                                            e.target.value = '';
+                                          }
+                                        }}
+                                        className="w-full p-1.5 border rounded-lg bg-white text-sm"
+                                      >
+                                        <option value="">Select a chapter...</option>
+                                        {availableChapters.map((ch, i) => (
+                                          <option key={i} value={ch}>{ch}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  );
+                                })()}
+                                
+                                {/* Manual input */}
+                                <div className="flex gap-2 mb-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Or enter chapter manually..."
+                                    value={examChapterInput}
+                                    onChange={(e) => setExamChapterInput(e.target.value)}
+                                    onKeyPress={(e) => {
+                                      if (e.key === 'Enter' && examChapterInput.trim()) {
+                                        setNewExamSubject({
+                                          ...newExamSubject,
+                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending' }]
+                                        });
+                                        setExamChapterInput('');
+                                      }
+                                    }}
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      if (examChapterInput.trim()) {
+                                        setNewExamSubject({
+                                          ...newExamSubject,
+                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending' }]
+                                        });
+                                        setExamChapterInput('');
+                                      }
+                                    }}
+                                    className="px-3 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                                
+                                {/* Display added chapters */}
+                                {newExamSubject.chapters.length > 0 && (
+                                  <div className="space-y-1 mb-2">
+                                    {newExamSubject.chapters.map((ch, idx) => (
+                                      <div key={idx} className="flex items-center justify-between p-1.5 bg-white rounded text-sm border">
+                                        <span className="text-gray-700">{ch.name}</span>
+                                        <button
+                                          onClick={() => {
+                                            setNewExamSubject({
+                                              ...newExamSubject,
+                                              chapters: newExamSubject.chapters.filter((_, i) => i !== idx)
+                                            });
+                                          }}
+                                          className="text-red-500 hover:text-red-700"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <textarea
+                                placeholder="Notes/Key points (optional)..."
+                                value={newExamSubject.keyPoints}
+                                onChange={(e) => setNewExamSubject({ ...newExamSubject, keyPoints: e.target.value })}
+                                className="w-full p-2 border rounded-lg text-sm"
+                                rows="2"
+                              />
+                              
+                              <button
+                                onClick={() => {
+                                  if (newExamSubject.subject && newExamSubject.date) {
+                                    const updatedSubjects = [...exam.subjects, newExamSubject];
+                                    updateExam(exam.id, { subjects: updatedSubjects });
+                                    setNewExamSubject({ subject: '', date: '', chapters: [], keyPoints: '' });
+                                    setExamChapterInput('');
+                                  }
+                                }}
+                                className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-medium"
+                                disabled={!newExamSubject.subject || !newExamSubject.date}
+                              >
+                                + Add {newExamSubject.subject ? `"${newExamSubject.subject}"` : 'Subject'} to {exam.name}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2740,3 +3305,16 @@ const StudyTrackerApp = () => {
 };
 
 export default StudyTrackerApp;
+
+
+
+
+
+
+
+
+
+
+
+
+

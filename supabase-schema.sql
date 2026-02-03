@@ -52,6 +52,18 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Recurring Reminders table (repeating reminders like "Tuition every Mon/Wed/Thu at 7:15 PM")
+CREATE TABLE IF NOT EXISTS recurring_reminders (
+    id BIGSERIAL PRIMARY KEY,
+    profile_id BIGINT REFERENCES profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    time TIME NOT NULL DEFAULT '19:15',
+    end_time TIME DEFAULT '20:00',
+    days JSONB DEFAULT '[]'::JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Shared activities table (not tied to specific profile)
 CREATE TABLE IF NOT EXISTS shared_activities (
     id BIGSERIAL PRIMARY KEY,
@@ -75,6 +87,7 @@ ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reminders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recurring_reminders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shared_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE standard_activities ENABLE ROW LEVEL SECURITY;
 
@@ -94,6 +107,9 @@ CREATE POLICY "Allow all on exams" ON exams FOR ALL USING (true);
 DROP POLICY IF EXISTS "Allow all on reminders" ON reminders;
 CREATE POLICY "Allow all on reminders" ON reminders FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Allow all on recurring_reminders" ON recurring_reminders;
+CREATE POLICY "Allow all on recurring_reminders" ON recurring_reminders FOR ALL USING (true) WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Allow all on shared_activities" ON shared_activities;
 CREATE POLICY "Allow all on shared_activities" ON shared_activities FOR ALL USING (true);
 
@@ -108,4 +124,5 @@ CREATE INDEX IF NOT EXISTS idx_exams_profile_id ON exams(profile_id);
 CREATE INDEX IF NOT EXISTS idx_exams_date ON exams(date);
 CREATE INDEX IF NOT EXISTS idx_reminders_profile_id ON reminders(profile_id);
 CREATE INDEX IF NOT EXISTS idx_reminders_date ON reminders(date);
+CREATE INDEX IF NOT EXISTS idx_recurring_reminders_profile_id ON recurring_reminders(profile_id);
 CREATE INDEX IF NOT EXISTS idx_standard_activities_profile_id ON standard_activities(profile_id);

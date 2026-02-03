@@ -145,7 +145,14 @@ const StudyTrackerApp = () => {
 
       setSubjects(subjectsResult.data || []);
       setTasks(tasksResult.data || []);
-      setExams(examsResult.data || []);
+      const examsData = examsResult.data || [];
+      setExams(examsData);
+      // Initialize all exams as minimized
+      const minimizedState = {};
+      examsData.forEach(exam => {
+        minimizedState[exam.id] = true;
+      });
+      setMinimizedExams(minimizedState);
       setReminders(remindersResult.data || []);
       setRecurringReminders(recurringRemindersResult.data || []);
       
@@ -612,6 +619,11 @@ const StudyTrackerApp = () => {
         
         if (data && data.length > 0) {
           setExams([...exams, data[0]]);
+          // Set new exam as minimized by default
+          setMinimizedExams(prev => ({
+            ...prev,
+            [data[0].id]: true
+          }));
         }
         
         setNewExam({ name: '', subjects: [] });
@@ -1939,7 +1951,11 @@ const StudyTrackerApp = () => {
                     ↻ Recurring
                   </button>
                   <button
-                    onClick={() => setShowAddReminder(true)}
+                    onClick={() => {
+                      const todayDate = new Date().toISOString().split('T')[0];
+                      setNewReminder({ title: '', date: todayDate, description: '' });
+                      setShowAddReminder(true);
+                    }}
                     className="text-indigo-600 hover:text-indigo-700"
                   >
                     <Plus className="w-5 h-5" />
@@ -2705,7 +2721,7 @@ const StudyTrackerApp = () => {
                                 className="w-full p-2 border rounded-lg bg-white font-bold text-lg"
                               />
                             ) : (
-                              <h3 className="text-xl font-bold text-gray-800">{exam.name}</h3>
+                              <h3 className="text-xl font-bold text-gray-600">{exam.name}</h3>
                             )}
                           </div>
                           <div className="flex items-center gap-2">
@@ -2714,7 +2730,7 @@ const StudyTrackerApp = () => {
                                 onClick={() => setEditingExam(null)}
                                 className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
                               >
-                                Done
+                                Update Exam
                               </button>
                             ) : (
                               <button

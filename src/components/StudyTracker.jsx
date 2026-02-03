@@ -901,7 +901,7 @@ const StudyTrackerApp = () => {
   };
 
   // Get reminders for today (both one-time and recurring)
-  const getTodayReminders = () => {
+  const _getTodayReminders = () => {
     const todayIST = getTodayDateIST();
     const todayDayOfWeek = getTodayDayOfWeekIST();
     

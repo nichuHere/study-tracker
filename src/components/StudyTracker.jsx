@@ -1005,9 +1005,9 @@ const StudyTrackerApp = () => {
 
   // Get upcoming reminders
   const getUpcomingReminders = () => {
-    const today = new Date();
-    return reminders.filter(r => new Date(r.date) >= today)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const todayIST = getTodayDateIST();
+    return reminders.filter(r => r.date >= todayIST)
+      .sort((a, b) => a.date.localeCompare(b.date));
   };
 
   // Get upcoming exams
@@ -2709,9 +2709,12 @@ const StudyTrackerApp = () => {
                     const progress = getExamProgress(exam);
                     
                     return (
-                      <div key={exam.id} className="border-2 border-indigo-200 rounded-lg p-4 bg-indigo-50">
+                      <div key={exam.id} className="border-2 border-indigo-200 rounded-lg p-4 bg-indigo-50 cursor-pointer hover:bg-indigo-100 transition-colors" onClick={() => !editingExam && setMinimizedExams(prev => ({
+                        ...prev,
+                        [exam.id]: !prev[exam.id]
+                      }))}>
                         {/* Exam Header */}
-                        <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start justify-between mb-4" onClick={(e) => e.stopPropagation()}>
                           <div className="flex-1">
                             {editingExam === exam.id ? (
                               <input
@@ -2724,7 +2727,7 @@ const StudyTrackerApp = () => {
                               <h3 className="text-xl font-bold text-gray-600">{exam.name}</h3>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             {editingExam === exam.id ? (
                               <button
                                 onClick={() => setEditingExam(null)}

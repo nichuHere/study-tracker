@@ -14,7 +14,6 @@ const StudyTrackerApp = () => {
   const [sharedActivities, setSharedActivities] = useState([]);
   const [showSharedActivities, setShowSharedActivities] = useState(false);
   const [newSharedActivity, setNewSharedActivity] = useState({ title: '', description: '', category: 'indoor' });
-  const [showDataManager, setShowDataManager] = useState(false);
   
   const [subjects, setSubjects] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -86,8 +85,12 @@ const StudyTrackerApp = () => {
 
   // Load data from storage on mount
   useEffect(() => {
-    loadProfiles();
-    loadSharedActivities();
+    const init = async () => {
+      _setLoading(true);
+      await Promise.all([loadProfiles(), loadSharedActivities()]);
+      _setLoading(false);
+    };
+    init();
   }, []);
 
   const loadSharedActivities = async () => {
@@ -108,9 +111,14 @@ const StudyTrackerApp = () => {
 
   // Load profile data when active profile changes
   useEffect(() => {
-    if (activeProfile) {
-      loadProfileData(activeProfile.id);
-    }
+    const load = async () => {
+      if (activeProfile) {
+        _setLoading(true);
+        await loadProfileData(activeProfile.id);
+        _setLoading(false);
+      }
+    };
+    load();
   }, [activeProfile]);
 
   const loadProfiles = async () => {
@@ -119,9 +127,7 @@ const StudyTrackerApp = () => {
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: true });
-      
       if (error) throw error;
-      
       if (data && data.length > 0) {
         setProfiles(data);
         setActiveProfile(data[0]);
@@ -242,6 +248,7 @@ const StudyTrackerApp = () => {
   };
 
   const switchProfile = (profile) => {
+    _setLoading(true);
     setActiveProfile(profile);
     setActiveView('daily');
   };
@@ -307,93 +314,7 @@ const StudyTrackerApp = () => {
     }
   };
 
-  // Data export/import for persistence
-  const exportAllData = async () => {
-    try {
-      const allData = {
-        profiles,
-        sharedActivities,
-        timestamp: new Date().toISOString(),
-        version: '1.0'
-      };
 
-      // Export profile-specific data
-      for (const profile of profiles) {
-        const [subjectsData, tasksData, examsData, remindersData, standardData] = await Promise.all([
-          window.storage.get(`subjects_${profile.id}`),
-          window.storage.get(`tasks_${profile.id}`),
-          window.storage.get(`exams_${profile.id}`),
-          window.storage.get(`reminders_${profile.id}`),
-          window.storage.get(`standardActivities_${profile.id}`)
-        ]);
-
-        allData[`profile_${profile.id}`] = {
-          subjects: subjectsData?.value ? JSON.parse(subjectsData.value) : [],
-          tasks: tasksData?.value ? JSON.parse(tasksData.value) : [],
-          exams: examsData?.value ? JSON.parse(examsData.value) : [],
-          reminders: remindersData?.value ? JSON.parse(remindersData.value) : [],
-          standardActivities: standardData?.value ? JSON.parse(standardData.value) : []
-        };
-      }
-
-      const dataStr = JSON.stringify(allData, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `study-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      
-      alert('Data exported successfully! Save this file to restore your data later.');
-    } catch (error) {
-      alert('Error exporting data: ' + error.message);
-    }
-  };
-
-  const importAllData = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const allData = JSON.parse(text);
-
-      // Restore profiles
-      if (allData.profiles) {
-        setProfiles(allData.profiles);
-        await window.storage.set('profiles', JSON.stringify(allData.profiles));
-      }
-
-      // Restore shared activities
-      if (allData.sharedActivities) {
-        setSharedActivities(allData.sharedActivities);
-        await window.storage.set('shared_activities', JSON.stringify(allData.sharedActivities), true);
-      }
-
-      // Restore profile-specific data
-      for (const profile of allData.profiles || []) {
-        const profileData = allData[`profile_${profile.id}`];
-        if (profileData) {
-          await window.storage.set(`subjects_${profile.id}`, JSON.stringify(profileData.subjects || []));
-          await window.storage.set(`tasks_${profile.id}`, JSON.stringify(profileData.tasks || []));
-          await window.storage.set(`exams_${profile.id}`, JSON.stringify(profileData.exams || []));
-          await window.storage.set(`reminders_${profile.id}`, JSON.stringify(profileData.reminders || []));
-          await window.storage.set(`standardActivities_${profile.id}`, JSON.stringify(profileData.standardActivities || []));
-        }
-      }
-
-      // Set active profile
-      if (allData.profiles && allData.profiles.length > 0) {
-        setActiveProfile(allData.profiles[0]);
-      }
-
-      alert('Data imported successfully! Please refresh the page.');
-      window.location.reload();
-    } catch (error) {
-      alert('Error importing data: ' + error.message);
-    }
-  };
 
   // Standard activities management
   const addStandardActivity = async () => {
@@ -1230,7 +1151,18 @@ const StudyTrackerApp = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-4xl mx-auto">
+      {_loading && (
+        <div className="fixed inset-0 flex items-center justify-center bg-white bg-opacity-70 z-50">
+          <div className="flex flex-col items-center">
+            <svg className="animate-spin h-12 w-12 text-indigo-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+            <div className="text-indigo-700 font-semibold text-lg">Loading...</div>
+          </div>
+        </div>
+      )}
+      <div className={`max-w-4xl mx-auto${_loading ? ' opacity-30 pointer-events-none select-none' : ''}`}>
         {/* Profile Selector */}
         {profiles.length === 0 ? (
           <div className="bg-white rounded-lg shadow-lg p-8 mb-4 text-center">
@@ -1336,22 +1268,6 @@ const StudyTrackerApp = () => {
                   >
                     <Trash2 className="w-3 h-3" />
                     Delete {activeProfile.name}'s Profile
-                  </button>
-                  <button
-                    onClick={() => setShowDataManager(true)}
-                    className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                  >
-                    📥 Backup & Restore
-                  </button>
-                </div>
-              )}
-              {activeProfile && profiles.length === 1 && (
-                <div className="mt-3 pt-3 border-t flex justify-end">
-                  <button
-                    onClick={() => setShowDataManager(true)}
-                    className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                  >
-                    📥 Backup & Restore
                   </button>
                 </div>
               )}
@@ -1621,77 +1537,7 @@ const StudyTrackerApp = () => {
           </div>
         )}
 
-        {/* Data Manager Modal */}
-        {showDataManager && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">Backup & Restore Data</h2>
-                  <button
-                    onClick={() => setShowDataManager(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
 
-                <div className="space-y-4">
-                  {/* Export Data */}
-                  <div className="border rounded-lg p-4 bg-green-50">
-                    <h3 className="font-semibold text-gray-800 mb-2">📤 Export Data</h3>
-                    <p className="text-sm text-gray-600 mb-3">
-                      Download a backup file containing all your data. Save this file to restore your data later or on another device.
-                    </p>
-                    <button
-                      onClick={exportAllData}
-                      className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-medium"
-                    >
-                      Download Backup File
-                    </button>
-                  </div>
-
-                  {/* Import Data */}
-                  <div className="border rounded-lg p-4 bg-blue-50">
-                    <h3 className="font-semibold text-gray-800 mb-2">📥 Import Data</h3>
-                    <p className="text-sm text-gray-600 mb-3">
-                      Restore your data from a previously saved backup file. This will replace all current data.
-                    </p>
-                    <label className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 font-medium cursor-pointer block text-center">
-                      Select Backup File
-                      <input
-                        type="file"
-                        accept=".json"
-                        onChange={importAllData}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
-                  {/* Info */}
-                  <div className="border rounded-lg p-4 bg-yellow-50">
-                    <h3 className="font-semibold text-gray-800 mb-2">💡 Tips</h3>
-                    <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                      <li>Export your data regularly to avoid losing it</li>
-                      <li>Save backup files in a safe location</li>
-                      <li>You can use backups to transfer data between devices</li>
-                      <li>Importing will overwrite all current data</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-4 border-t">
-                  <button
-                    onClick={() => setShowDataManager(false)}
-                    className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 font-medium"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Navigation */}
         <div className="bg-white rounded-lg shadow-lg mb-4 p-2 flex gap-2 overflow-x-auto">

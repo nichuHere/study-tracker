@@ -16,6 +16,7 @@ const SchoolDocuments = ({ profileId }) => {
     if (profileId) {
       loadDocuments();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId]);
 
   const loadDocuments = async () => {
@@ -64,7 +65,7 @@ const SchoolDocuments = ({ profileId }) => {
       const fileName = `${profileId}_${Date.now()}.${fileExt}`;
       const filePath = `${profileId}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { data: _uploadData, error: uploadError } = await supabase.storage
         .from('school-documents')
         .upload(filePath, file);
 
@@ -76,7 +77,7 @@ const SchoolDocuments = ({ profileId }) => {
         .getPublicUrl(filePath);
 
       // Save document record to database
-      const { data, error } = await supabase
+      const { data: _data, error } = await supabase
         .from('school_documents')
         .insert([{
           profile_id: profileId,

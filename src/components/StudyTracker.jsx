@@ -41,15 +41,19 @@ const StudyTrackerApp = ({ session }) => {
   const [newSubject, setNewSubject] = useState({ name: '', chapters: [] });
   const [editingChapter, setEditingChapter] = useState(null);
   const [newChapterName, setNewChapterName] = useState('');
-  const [newTask, setNewTask] = useState({ 
+  const [newTask, setNewTask] = useState(() => ({ 
     subject: '', 
     chapter: '', 
     activity: '', 
     duration: 30, 
-    date: new Date().toISOString().split('T')[0],
+    date: (() => {
+      const now = new Date();
+      const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      return istTime.toISOString().split('T')[0];
+    })(),
     completed: false,
     instructions: ''
-  });
+  }));
   const [newExam, setNewExam] = useState({
     name: '', // e.g., "First Mid-term Exams"
     subjects: [], // Array of {subject: '', date: '', chapters: [], keyPoints: ''}
@@ -155,6 +159,7 @@ const StudyTrackerApp = ({ session }) => {
       setSubjects(subjectsResult.data || []);
       setTasks(tasksResult.data || []);
       const examsData = examsResult.data || [];
+      console.log('📚 Loading exams from database:', examsData);
       setExams(examsData);
       // Initialize all exams as minimized
       const minimizedState = {};
@@ -477,7 +482,7 @@ const StudyTrackerApp = ({ session }) => {
           chapter: '', 
           activity: '', 
           duration: 30, 
-          date: new Date().toISOString().split('T')[0],
+          date: getTodayDateIST(),
           completed: false,
           instructions: ''
         });
@@ -536,7 +541,7 @@ const StudyTrackerApp = ({ session }) => {
             profile_id: activeProfile.id,
             name: newExam.name.trim(),
             subjects: newExam.subjects,
-            date: newExam.subjects[0]?.date || new Date().toISOString().split('T')[0]
+            date: newExam.subjects[0]?.date || getTodayDateIST()
           }])
           .select();
         
@@ -579,6 +584,7 @@ const StudyTrackerApp = ({ session }) => {
 
   const updateExam = async (examId, updates) => {
     try {
+      console.log('📝 Updating exam:', examId, updates);
       const { error } = await supabase
         .from('exams')
         .update(updates)
@@ -589,6 +595,7 @@ const StudyTrackerApp = ({ session }) => {
       const updated = exams.map(exam => 
         exam.id === examId ? { ...exam, ...updates } : exam
       );
+      console.log('✅ Exam updated in state:', updated.find(e => e.id === examId));
       setExams(updated);
     } catch (error) {
       console.error('Error updating exam:', error);
@@ -658,6 +665,19 @@ const StudyTrackerApp = ({ session }) => {
       await updateExam(examId, { subjects: updatedSubjects });
     } catch (error) {
       console.error('Error deleting chapter:', error);
+    }
+  };
+
+  const deleteSubjectFromExam = async (examId, subjectIndex) => {
+    try {
+      const exam = exams.find(e => e.id === examId);
+      if (!exam) return;
+      
+      const updatedSubjects = exam.subjects.filter((_, i) => i !== subjectIndex);
+      
+      await updateExam(examId, { subjects: updatedSubjects });
+    } catch (error) {
+      console.error('Error deleting subject from exam:', error);
     }
   };
 
@@ -924,7 +944,7 @@ const StudyTrackerApp = ({ session }) => {
 
   // Get today's tasks
   const getTodayTasks = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateIST();
     return tasks.filter(t => t.date === today);
   };
 
@@ -938,10 +958,16 @@ const StudyTrackerApp = ({ session }) => {
   // Get upcoming exams
   const getUpcomingExams = () => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     return exams.filter(exam => {
       if (!exam.subjects || exam.subjects.length === 0) return false;
-      // Check if any subject has a future date
-      return exam.subjects.some(s => new Date(s.date) >= today);
+      // Check if any subject has a future or today's date
+      return exam.subjects.some(s => {
+        const examDate = new Date(s.date);
+        examDate.setHours(0, 0, 0, 0);
+        return examDate >= today;
+      });
     }).sort((a, b) => {
       // Sort by earliest subject date
       const earliestA = Math.min(...a.subjects.map(s => new Date(s.date)));
@@ -950,8 +976,81 @@ const StudyTrackerApp = ({ session }) => {
     });
   };
 
-  // Calculate progress by subject
-  const _getSubjectProgress = () => {
+  // Get all upcoming exam subjects (flattened for calendar view)
+  const getUpcomingExamSubjects = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const upcomingSubjects = [];
+    exams.forEach(exam => {
+      if (exam.subjects && exam.subjects.length > 0) {
+        exam.subjects.forEach(subject => {
+          const examDate = new Date(subject.date);
+          examDate.setHours(0, 0, 0, 0);
+          
+          if (examDate >= today) {
+            upcomingSubjects.push({
+              examName: exam.name,
+              examId: exam.id,
+              subject: subject.subject,
+              date: subject.date,
+              chapters: subject.chapters || [],
+              keyPoints: subject.keyPoints || ''
+            });
+          }
+        });
+      }
+    });
+    
+    // Sort by date
+    return upcomingSubjects.sort((a, b) => new Date(a.date) - new Date(b.date));
+  };
+
+  // Categorize exams by urgency for better UI presentation
+  // eslint-disable-next-line no-unused-vars
+  const _categorizeExams = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const urgent = [];    // < 7 days
+    const soon = [];      // 7-21 days (3 weeks)
+    const future = [];    // > 21 days
+    
+    getUpcomingExams().forEach(exam => {
+      // Find the earliest exam date from all subjects
+      const earliestDate = Math.min(...exam.subjects.map(s => new Date(s.date)));
+      const daysUntil = Math.ceil((earliestDate - today) / (1000 * 60 * 60 * 24));
+      
+      if (daysUntil < 7) {
+        urgent.push({ ...exam, daysUntil });
+      } else if (daysUntil < 21) {
+        soon.push({ ...exam, daysUntil });
+      } else {
+        future.push({ ...exam, daysUntil });
+      }
+    });
+    
+    return { urgent, soon, future };
+  };
+
+  // Get subject-level progress for an exam
+  // eslint-disable-next-line no-unused-vars
+  const _getSubjectProgress = (subject) => {
+    const totalChapters = subject.chapters?.length || 0;
+    const completedChapters = subject.chapters?.filter(c => c.status === 'completed').length || 0;
+    const startedChapters = subject.chapters?.filter(c => c.status === 'started').length || 0;
+    
+    return {
+      total: totalChapters,
+      completed: completedChapters,
+      started: startedChapters,
+      pending: totalChapters - completedChapters - startedChapters,
+      percentage: totalChapters > 0 ? Math.round((completedChapters / totalChapters) *  100) : 0
+    };
+  };
+
+  // Legacy function for backward compatibility
+  const _getSubjectProgressLegacy = () => {
     return subjects.map(subject => {
       const subjectTasks = tasks.filter(t => t.subject === subject.name);
       const completedTasks = subjectTasks.filter(t => t.completed).length;
@@ -1743,7 +1842,7 @@ const StudyTrackerApp = ({ session }) => {
                           chapter: '', 
                           activity: '', 
                           duration: 30, 
-                          date: new Date().toISOString().split('T')[0],
+                          date: getTodayDateIST(),
                           completed: false,
                           instructions: ''
                         });
@@ -1826,7 +1925,7 @@ const StudyTrackerApp = ({ session }) => {
                   </button>
                   <button
                     onClick={() => {
-                      const todayDate = new Date().toISOString().split('T')[0];
+                      const todayDate = getTodayDateIST();
                       setNewReminder({ title: '', date: todayDate, description: '' });
                       setShowAddReminder(true);
                     }}
@@ -2301,10 +2400,25 @@ const StudyTrackerApp = ({ session }) => {
           </div>
         )}
 
-        {/* Exams View */}
+        {/* Exams View - Redesigned */}
         {activeView === 'exams' && (
-          <div className="space-y-4">
-            {/* Exam Analytics */}
+          <div className="space-y-6">
+            {/* Header with Add Exam Button */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <Book className="w-7 h-7 text-indigo-600" />
+                Exam Management
+              </h2>
+              <button
+                onClick={() => setShowAddExam(true)}
+                className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 flex items-center gap-2 shadow-lg transition-all"
+              >
+                <Plus className="w-5 h-5" />
+                Add New Exam
+              </button>
+            </div>
+            
+            {/* Add Exam Modal */}
             {exams.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg shadow-lg p-4">
@@ -2322,58 +2436,116 @@ const StudyTrackerApp = ({ session }) => {
                 <div className="bg-white rounded-lg shadow-lg p-4">
                   <div className="text-sm text-gray-600 mb-1">Next Exam</div>
                   <div className="text-2xl font-bold text-red-600">
-                    {getUpcomingExams().length > 0 ? getDaysUntil(getUpcomingExams()[0].date) : 0}
+                    {getUpcomingExamSubjects().length > 0 ? getDaysUntil(getUpcomingExamSubjects()[0].date) : 0}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">Days away</div>
                 </div>
               </div>
             )}
 
-            {/* Calendar View */}
-            {exams.length > 0 && (
+            {/* Calendar View - 3 Column Card Layout */}
+            {exams.length > 0 && getUpcomingExamSubjects().length > 0 && (
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-indigo-600" />
                   Exam Calendar
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    ({getUpcomingExamSubjects().length} upcoming)
+                  </span>
                 </h3>
-                <div className="space-y-2">
-                  {getUpcomingExams().map((exam, i) => {
-                    const daysLeft = getDaysUntil(exam.date);
-                    const progress = getExamProgress(exam);
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {getUpcomingExamSubjects().map((examSubject, i) => {
+                    const daysLeft = getDaysUntil(examSubject.date);
+                    const totalChapters = examSubject.chapters.length;
+                    const completedChapters = examSubject.chapters.filter(c => c.status === 'completed').length;
+                    const startedChapters = examSubject.chapters.filter(c => c.status === 'started').length;
+                    const progress = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
+                    
                     return (
-                      <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border">
-                        <div className="text-center min-w-[60px]">
-                          <div className={`text-2xl font-bold ${daysLeft <= 3 ? 'text-red-600' : 'text-indigo-600'}`}>
-                            {new Date(exam.date).getDate()}
+                      <div 
+                        key={i} 
+                        className={`rounded-lg border-2 p-4 transition-all hover:shadow-md ${
+                          daysLeft <= 3 ? 'border-red-300 bg-red-50' :
+                          daysLeft <= 7 ? 'border-yellow-300 bg-yellow-50' :
+                          'border-blue-200 bg-blue-50'
+                        }`}
+                      >
+                        {/* Header with Date Badge */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h4 className="font-bold text-gray-800 text-sm mb-1">{examSubject.subject}</h4>
+                            <p className="text-xs text-gray-600">{examSubject.examName}</p>
                           </div>
-                          <div className="text-xs text-gray-600">
-                            {new Date(exam.date).toLocaleDateString('en-US', { month: 'short' })}
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-800">{exam.subject}</div>
-                          <div className="text-sm text-gray-600">{formatDateWithDay(exam.date)}</div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-                              <div
-                                className="bg-green-500 h-1.5 rounded-full"
-                                style={{ width: `${progress.percentage}%` }}
-                              />
+                          <div className={`text-center min-w-[50px] rounded-lg p-2 ${
+                            daysLeft <= 3 ? 'bg-red-600' :
+                            daysLeft <= 7 ? 'bg-yellow-600' :
+                            'bg-blue-600'
+                          }`}>
+                            <div className="text-xs text-white font-semibold">
+                              {new Date(examSubject.date).toLocaleDateString('en-US', { weekday: 'short' })}
                             </div>
-                            <span className="text-xs text-gray-600">{progress.percentage}%</span>
+                            <div className="text-xl font-bold text-white">
+                              {new Date(examSubject.date).getDate()}
+                            </div>
+                            <div className="text-xs text-white font-medium">
+                              {new Date(examSubject.date).toLocaleDateString('en-US', { month: 'short' })}
+                            </div>
                           </div>
                         </div>
-                        <div className={`px-3 py-1 rounded text-xs font-semibold ${
+
+                        {/* Days Countdown */}
+                        <div className={`text-center py-2 rounded-lg mb-3 font-bold ${
+                          daysLeft === 0 ? 'bg-red-100 text-red-700 text-base' :
                           daysLeft <= 3 ? 'bg-red-100 text-red-700' :
                           daysLeft <= 7 ? 'bg-yellow-100 text-yellow-700' :
                           'bg-blue-100 text-blue-700'
                         }`}>
-                          {daysLeft} days
+                          {daysLeft === 0 ? '🔥 Today!' : daysLeft === 1 ? `Tomorrow` : `${daysLeft} days left`}
+                        </div>
+
+                        {/* Progress Bar */}
+                        {totalChapters > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between text-xs text-gray-700 mb-1">
+                              <span className="font-semibold">Progress</span>
+                              <span className="font-bold">{progress}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${
+                                  progress === 100 ? 'bg-green-500' :
+                                  progress >= 50 ? 'bg-blue-500' :
+                                  'bg-yellow-500'
+                                }`}
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex gap-2">
+                                <span className="text-green-600">✓ {completedChapters}</span>
+                                <span className="text-yellow-600">⚡ {startedChapters}</span>
+                                <span className="text-gray-500">○ {totalChapters - completedChapters - startedChapters}</span>
+                              </div>
+                              <span className="text-gray-600 font-medium">{totalChapters} ch.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Date */}
+                        <div className="text-xs text-gray-600 text-center pt-2 border-t border-gray-200">
+                          {formatDateWithDay(examSubject.date)}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                
+                {getUpcomingExamSubjects().length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No upcoming exams scheduled</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2588,7 +2760,7 @@ const StudyTrackerApp = ({ session }) => {
                         [exam.id]: !prev[exam.id]
                       }))}>
                         {/* Exam Header */}
-                        <div className="flex items-start justify-between mb-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-start justify-between mb-4">
                           <div className="flex-1">
                             {editingExam === exam.id ? (
                               <input
@@ -2596,6 +2768,7 @@ const StudyTrackerApp = ({ session }) => {
                                 value={exam.name}
                                 onChange={(e) => updateExam(exam.id, { name: e.target.value })}
                                 className="w-full p-2 border rounded-lg bg-white font-bold text-lg"
+                                onClick={(e) => e.stopPropagation()}
                               />
                             ) : (
                               <h3 className="text-xl font-bold text-gray-600">{exam.name}</h3>
@@ -2611,7 +2784,11 @@ const StudyTrackerApp = ({ session }) => {
                               </button>
                             ) : (
                               <button
-                                onClick={() => setEditingExam(exam.id)}
+                                onClick={() => {
+                                  setEditingExam(exam.id);
+                                  // Auto-expand exam when editing
+                                  setMinimizedExams(prev => ({ ...prev, [exam.id]: false }));
+                                }}
                                 className="text-indigo-600 hover:text-indigo-700"
                                 title="Edit exam"
                               >
@@ -2700,12 +2877,27 @@ const StudyTrackerApp = ({ session }) => {
                                           updatedSubjects[subjectIdx] = { ...subject, date: e.target.value };
                                           updateExam(exam.id, { subjects: updatedSubjects });
                                         }}
+                                        onClick={(e) => e.stopPropagation()}
                                         className="text-sm p-1 border rounded mt-1"
                                       />
                                     ) : (
                                       <p className="text-xs text-gray-600">{formatDateWithDay(subject.date)}</p>
                                     )}
                                   </div>
+                                  {editingExam === exam.id && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm(`Delete ${subject.subject} from this exam?`)) {
+                                          deleteSubjectFromExam(exam.id, subjectIdx);
+                                        }
+                                      }}
+                                      className="text-red-500 hover:text-red-700 ml-2"
+                                      title="Delete subject"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
                                 </div>
 
                                 {/* Subject Progress */}
@@ -2733,6 +2925,7 @@ const StudyTrackerApp = ({ session }) => {
                                               <select
                                                 value={chapter.status}
                                                 onChange={(e) => updateChapterStatus(exam.id, subjectIdx, chapterIdx, e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
                                                 className={`text-xs px-2 py-1 rounded font-medium ${
                                                   chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
                                                   chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
@@ -2744,7 +2937,10 @@ const StudyTrackerApp = ({ session }) => {
                                                 <option value="completed">Completed</option>
                                               </select>
                                               <button
-                                                onClick={() => deleteChapterFromExamSubject(exam.id, subjectIdx, chapterIdx)}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  deleteChapterFromExamSubject(exam.id, subjectIdx, chapterIdx);
+                                                }}
                                                 className="text-red-500 hover:text-red-700"
                                               >
                                                 <X className="w-3 h-3" />
@@ -2752,7 +2948,8 @@ const StudyTrackerApp = ({ session }) => {
                                             </>
                                           ) : (
                                             <button
-                                              onClick={() => {
+                                              onClick={(e) => {
+                                                e.stopPropagation();
                                                 const statuses = ['pending', 'started', 'completed'];
                                                 const currentIndex = statuses.indexOf(chapter.status);
                                                 const nextStatus = statuses[(currentIndex + 1) % statuses.length];
@@ -2794,6 +2991,7 @@ const StudyTrackerApp = ({ session }) => {
                                                 e.target.value = '';
                                               }
                                             }}
+                                            onClick={(e) => e.stopPropagation()}
                                             className="w-full p-1.5 text-sm border rounded bg-white"
                                           >
                                             <option value="">Select a chapter...</option>
@@ -2818,10 +3016,12 @@ const StudyTrackerApp = ({ session }) => {
                                               e.target.value = '';
                                             }
                                           }}
+                                          onClick={(e) => e.stopPropagation()}
                                           className="flex-1 p-1.5 text-sm border rounded"
                                         />
                                         <button
                                           onClick={(e) => {
+                                            e.stopPropagation();
                                             const input = e.target.previousSibling;
                                             if (input.value.trim()) {
                                               addChapterToExamSubject(exam.id, subjectIdx, input.value.trim());
@@ -2849,6 +3049,7 @@ const StudyTrackerApp = ({ session }) => {
                                           updatedSubjects[subjectIdx] = { ...subject, keyPoints: e.target.value };
                                           updateExam(exam.id, { subjects: updatedSubjects });
                                         }}
+                                        onClick={(e) => e.stopPropagation()}
                                         placeholder="Add key points or notes..."
                                         className="w-full p-2 text-sm border rounded bg-white"
                                         rows="2"
@@ -2880,6 +3081,7 @@ const StudyTrackerApp = ({ session }) => {
                               <select
                                 value={newExamSubject.subject}
                                 onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
                                 className="w-full p-2 border rounded-lg text-sm"
                               >
                                 <option value="">Select a subject...</option>
@@ -2892,6 +3094,7 @@ const StudyTrackerApp = ({ session }) => {
                                 type="date"
                                 value={newExamSubject.date}
                                 onChange={(e) => setNewExamSubject({ ...newExamSubject, date: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
                                 className="w-full p-2 border rounded-lg text-sm"
                                 placeholder="Exam date"
                               />
@@ -2919,6 +3122,7 @@ const StudyTrackerApp = ({ session }) => {
                                             e.target.value = '';
                                           }
                                         }}
+                                        onClick={(e) => e.stopPropagation()}
                                         className="w-full p-1.5 border rounded-lg bg-white text-sm"
                                       >
                                         <option value="">Select a chapter...</option>
@@ -2946,10 +3150,12 @@ const StudyTrackerApp = ({ session }) => {
                                         setExamChapterInput('');
                                       }
                                     }}
+                                    onClick={(e) => e.stopPropagation()}
                                     className="flex-1 p-2 border rounded-lg text-sm"
                                   />
                                   <button
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       if (examChapterInput.trim()) {
                                         setNewExamSubject({
                                           ...newExamSubject,
@@ -2971,7 +3177,8 @@ const StudyTrackerApp = ({ session }) => {
                                       <div key={idx} className="flex items-center justify-between p-1.5 bg-white rounded text-sm border">
                                         <span className="text-gray-700">{ch.name}</span>
                                         <button
-                                          onClick={() => {
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             setNewExamSubject({
                                               ...newExamSubject,
                                               chapters: newExamSubject.chapters.filter((_, i) => i !== idx)
@@ -2991,12 +3198,14 @@ const StudyTrackerApp = ({ session }) => {
                                 placeholder="Notes/Key points (optional)..."
                                 value={newExamSubject.keyPoints}
                                 onChange={(e) => setNewExamSubject({ ...newExamSubject, keyPoints: e.target.value })}
+                                onClick={(e) => e.stopPropagation()}
                                 className="w-full p-2 border rounded-lg text-sm"
                                 rows="2"
                               />
                               
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   if (newExamSubject.subject && newExamSubject.date) {
                                     const updatedSubjects = [...exam.subjects, newExamSubject];
                                     updateExam(exam.id, { subjects: updatedSubjects });

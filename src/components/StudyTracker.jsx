@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import SchoolDocuments from './SchoolDocuments';
 
-const StudyTrackerApp = () => {
+const StudyTrackerApp = ({ session }) => {
   const [profiles, setProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
   const [showAddProfile, setShowAddProfile] = useState(false);
@@ -126,6 +127,7 @@ const StudyTrackerApp = () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
+        .eq('user_id', session?.user?.id) // Only load profiles for current user
         .order('created_at', { ascending: true });
       if (error) throw error;
       if (data && data.length > 0) {
@@ -190,13 +192,14 @@ const StudyTrackerApp = () => {
   const addProfile = async () => {
     if (newProfileName.trim()) {
       try {
-        // Insert into Supabase
+        // Insert into Supabase - user_id will be automatically set by trigger
         const { data, error } = await supabase
           .from('profiles')
           .insert([
             {
               name: newProfileName.trim(),
-              class: newProfileClass.trim()
+              class: newProfileClass.trim(),
+              user_id: session?.user?.id // Explicitly set user_id from session
             }
           ])
           .select();
@@ -1166,7 +1169,7 @@ const StudyTrackerApp = () => {
         {/* Profile Selector */}
         {profiles.length === 0 ? (
           <div className="bg-white rounded-lg shadow-lg p-8 mb-4 text-center">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Welcome to Study Tracker!</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Welcome to Kannama Study Tracker!</h2>
             <p className="text-gray-600 mb-6">Create a profile for your first child to get started</p>
             
             <div className="max-w-md mx-auto space-y-3">
@@ -1275,17 +1278,41 @@ const StudyTrackerApp = () => {
 
             {/* Header */}
             <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <h1 className="text-3xl font-bold text-indigo-600">
-                  {activeProfile?.name}'s Study Tracker
-                </h1>
-                <button
-                  onClick={() => setShowSharedActivities(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-md"
-                >
-                  <Target className="w-5 h-5" />
-                  <span className="hidden sm:inline">Kids Activities</span>
-                </button>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col">
+                  <h1 className="text-3xl font-bold text-indigo-600">
+                    {activeProfile?.name}'s Study Tracker
+                  </h1>
+                  <div className="flex items-center gap-2 mt-1 px-3 py-1.5 bg-indigo-50 rounded-lg w-fit">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm font-medium text-indigo-700">
+                      {new Date().toLocaleDateString('en-US', { weekday: 'long' })}, {new Date().toLocaleDateString('en-US', { month: 'long' })} {new Date().getDate()}, {new Date().getFullYear()}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
+                    <User className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm text-gray-700">{session?.user?.email}</span>
+                  </div>
+                  <button
+                    onClick={() => setShowSharedActivities(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-md"
+                  >
+                    <Target className="w-5 h-5" />
+                    <span className="hidden sm:inline">Kids Activities</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await supabase.auth.signOut();
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-md"
+                    title="Log Out"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span className="hidden sm:inline">Log Out</span>
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-4 text-sm text-gray-600">
                 <div className="flex items-center gap-1">
@@ -1306,13 +1333,13 @@ const StudyTrackerApp = () => {
         {/* Only show content if profile is selected */}
         {activeProfile && (
           <>
-        {/* Activities Manager Modal */}
-        {showActivitiesManager && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">Manage Default Activities</h2>
+            {/* Activities Manager Modal */}
+            {showActivitiesManager && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-bold text-gray-800">Manage Default Activities</h2>
                   <button
                     onClick={() => {
                       setShowActivitiesManager(false);
@@ -1541,7 +1568,7 @@ const StudyTrackerApp = () => {
 
         {/* Navigation */}
         <div className="bg-white rounded-lg shadow-lg mb-4 p-2 flex gap-2 overflow-x-auto">
-          {['daily', 'analytics', 'subjects', 'exams'].map(view => (
+          {['daily', 'analytics', 'subjects', 'exams', 'docs'].map(view => (
             <button
               key={view}
               onClick={() => setActiveView(view)}
@@ -3168,6 +3195,19 @@ const StudyTrackerApp = () => {
               <div className="text-xs text-gray-600 text-center mt-2">
                 Last 14 days
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* School Documents View */}
+        {activeView === 'docs' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">School Documents</h2>
+              <p className="text-gray-600 mb-6">
+                Upload and manage your timetable and other important school documents.
+              </p>
+              <SchoolDocuments profileId={activeProfile?.id} />
             </div>
           </div>
         )}

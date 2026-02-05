@@ -1,53 +1,83 @@
-# Study Tracker - Setup Instructions
+# Kannama Study Tracker
 
-## 📦 What You Have
+A comprehensive family study tracking application with authentication, cloud storage, and school document management.
 
-A complete React app with Supabase (PostgreSQL) database integration.
+## 📚 Complete Documentation
 
-## 🚀 Quick Start (5 Steps)
+**For complete setup and usage instructions, please refer to:**
 
-### Step 1: Extract the Folder
-1. Extract the `study-tracker-supabase.zip` file
-2. Open the folder in VSCode
+👉 **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** 👈
 
-### Step 2: Install Dependencies
-Open terminal in VSCode (Ctrl+` or View → Terminal) and run:
-```bash
-npm install
-```
+This guide contains everything you need:
+- ✅ Initial setup instructions
+- ✅ Authentication configuration
+- ✅ School documents feature
+- ✅ Database schema details
+- ✅ Deployment to Vercel
+- ✅ Troubleshooting guide
+- ✅ Cost breakdown (100% FREE!)
 
-This will install:
-- React and React DOM
-- Supabase client
-- Lucide React (icons)
-- All required dependencies
+## ⚡ Quick Start
 
-**Wait for it to complete** (~2-3 minutes)
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-### Step 3: Set Up Supabase Database
+2. **Create Supabase project** at https://supabase.com
 
-#### 3a. Create Supabase Account
-1. Go to https://supabase.com
-2. Click "Start your project"
-3. Sign up with GitHub (recommended) or email
-4. Verify your email
+3. **Configure environment:**
+   Create `.env.local`:
+   ```env
+   REACT_APP_SUPABASE_URL=your-project-url
+   REACT_APP_SUPABASE_ANON_KEY=your-anon-key
+   ```
 
-#### 3b. Create New Project
-1. Click "New Project"
-2. Fill in:
-   - **Name**: `study-tracker`
-   - **Database Password**: Create a strong password (SAVE THIS!)
-   - **Region**: Choose closest to you (e.g., Mumbai, Singapore)
-   - **Pricing Plan**: Free
-3. Click "Create new project"
-4. **Wait 2-3 minutes** for database to initialize
+4. **Run database schema:**
+   - Copy `supabase-schema.sql` content
+   - Paste in Supabase SQL Editor
+   - Click Run
 
-#### 3c. Run Database Schema
-1. In Supabase dashboard, click "SQL Editor" (left sidebar)
-2. Click "New Query"
-3. Open the file `supabase-schema.sql` from your project
-4. Copy ALL the SQL code
-5. Paste into Supabase SQL Editor
+5. **Start app:**
+   ```bash
+   npm start
+   ```
+
+## 🎯 Key Features
+
+- Multi-child profile management
+- Subject & chapter organization
+- Daily task planning
+- Exam preparation tools
+- Reminders (one-time & recurring)
+- Study analytics & progress tracking
+- School document storage (timetables, PDFs)
+- Secure authentication
+- Beautiful, responsive UI
+
+## 📖 Important Files
+
+- `COMPLETE_GUIDE.md` - **Read this first!** Complete setup & usage guide
+- `supabase-schema.sql` - Main database schema
+- `supabase-auth-migration.sql` - Authentication setup
+- `supabase-school-docs-schema.sql` - School documents feature
+- `.env.local` - Your environment variables (create this)
+
+## 💰 Cost
+
+**$0/month** - 100% FREE using Supabase and Vercel free tiers!
+
+## 🚀 Tech Stack
+
+- React 18.2
+- Supabase (PostgreSQL + Auth + Storage)
+- Tailwind CSS
+- Lucide React Icons
+- Vercel Hosting
+
+---
+
+**For detailed instructions, troubleshooting, and advanced features, see [COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)**
 6. Click "Run" button
 7. You should see "Success. No rows returned"
 

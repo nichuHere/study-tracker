@@ -628,7 +628,12 @@ const StudyTrackerApp = ({ session }) => {
       const updatedSubjects = [...exam.subjects];
       updatedSubjects[subjectIndex] = {
         ...updatedSubjects[subjectIndex],
-        chapters: [...(updatedSubjects[subjectIndex].chapters || []), { name: chapterName.trim(), status: 'pending' }]
+        chapters: [...(updatedSubjects[subjectIndex].chapters || []), { 
+          name: chapterName.trim(), 
+          status: 'pending',
+          revisionsNeeded: 0,
+          revisionsCompleted: 0
+        }]
       };
       
       await updateExam(examId, { subjects: updatedSubjects });
@@ -650,6 +655,60 @@ const StudyTrackerApp = ({ session }) => {
       await updateExam(examId, { subjects: updatedSubjects });
     } catch (error) {
       console.error('Error updating chapter status:', error);
+    }
+  };
+
+  const updateChapterRevisions = async (examId, subjectIndex, chapterIndex, revisionsNeeded, revisionsCompleted) => {
+    try {
+      const exam = exams.find(e => e.id === examId);
+      if (!exam) return;
+      
+      const updatedSubjects = [...exam.subjects];
+      const updatedChapters = [...updatedSubjects[subjectIndex].chapters];
+      updatedChapters[chapterIndex] = { 
+        ...updatedChapters[chapterIndex], 
+        revisionsNeeded: revisionsNeeded ?? updatedChapters[chapterIndex].revisionsNeeded ?? 0,
+        revisionsCompleted: revisionsCompleted ?? updatedChapters[chapterIndex].revisionsCompleted ?? 0
+      };
+      updatedSubjects[subjectIndex] = { ...updatedSubjects[subjectIndex], chapters: updatedChapters };
+      
+      await updateExam(examId, { subjects: updatedSubjects });
+    } catch (error) {
+      console.error('Error updating chapter revisions:', error);
+    }
+  };
+
+  const incrementChapterRevision = async (examId, subjectIndex, chapterIndex) => {
+    try {
+      const exam = exams.find(e => e.id === examId);
+      if (!exam) return;
+      
+      const chapter = exam.subjects[subjectIndex]?.chapters[chapterIndex];
+      if (!chapter) return;
+      
+      const revisionsNeeded = chapter.revisionsNeeded ?? 0;
+      const revisionsCompleted = Math.min((chapter.revisionsCompleted ?? 0) + 1, revisionsNeeded);
+      
+      await updateChapterRevisions(examId, subjectIndex, chapterIndex, revisionsNeeded, revisionsCompleted);
+    } catch (error) {
+      console.error('Error incrementing revision:', error);
+    }
+  };
+
+  const decrementChapterRevision = async (examId, subjectIndex, chapterIndex) => {
+    try {
+      const exam = exams.find(e => e.id === examId);
+      if (!exam) return;
+      
+      const chapter = exam.subjects[subjectIndex]?.chapters[chapterIndex];
+      if (!chapter) return;
+      
+      const revisionsNeeded = chapter.revisionsNeeded ?? 0;
+      const revisionsCompleted = Math.max((chapter.revisionsCompleted ?? 0) - 1, 0);
+      
+      await updateChapterRevisions(examId, subjectIndex, chapterIndex, revisionsNeeded, revisionsCompleted);
+    } catch (error) {
+      console.error('Error decrementing revision:', error);
     }
   };
 
@@ -2610,7 +2669,7 @@ const StudyTrackerApp = ({ session }) => {
                                 if (e.target.value) {
                                   setNewExamSubject({
                                     ...newExamSubject,
-                                    chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending' }]
+                                    chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
                                   });
                                   e.target.value = '';
                                 }
@@ -2636,7 +2695,7 @@ const StudyTrackerApp = ({ session }) => {
                               if (e.key === 'Enter' && examChapterInput.trim()) {
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending' }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
                                 });
                                 setExamChapterInput('');
                               }
@@ -2648,7 +2707,7 @@ const StudyTrackerApp = ({ session }) => {
                               if (examChapterInput.trim()) {
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending' }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
                                 });
                                 setExamChapterInput('');
                               }
@@ -2917,56 +2976,113 @@ const StudyTrackerApp = ({ session }) => {
                                   <div className="mb-2">
                                     <div className="text-xs font-semibold text-gray-600 mb-1">Chapters:</div>
                                     <div className="space-y-1">
-                                      {subject.chapters.map((chapter, chapterIdx) => (
-                                        <div key={chapterIdx} className="flex items-center gap-2 p-1.5 bg-gray-50 rounded">
-                                          <div className="flex-1 text-sm">{chapter.name}</div>
-                                          {editingExam === exam.id ? (
-                                            <>
-                                              <select
-                                                value={chapter.status}
-                                                onChange={(e) => updateChapterStatus(exam.id, subjectIdx, chapterIdx, e.target.value)}
-                                                onClick={(e) => e.stopPropagation()}
-                                                className={`text-xs px-2 py-1 rounded font-medium ${
+                                      {subject.chapters.map((chapter, chapterIdx) => {
+                                        const revisionsNeeded = chapter.revisionsNeeded ?? 0;
+                                        const revisionsCompleted = chapter.revisionsCompleted ?? 0;
+                                        
+                                        return (
+                                          <div key={chapterIdx} className="flex items-center gap-2 p-1.5 bg-gray-50 rounded">
+                                            <div className="flex-1 text-sm">{chapter.name}</div>
+                                            
+                                            {/* Revision Counter - Always visible if revisions needed */}
+                                            {revisionsNeeded > 0 && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (!editingExam) {
+                                                    if (e.shiftKey && revisionsCompleted > 0) {
+                                                      // Shift+Click to decrement
+                                                      decrementChapterRevision(exam.id, subjectIdx, chapterIdx);
+                                                    } else if (revisionsCompleted < revisionsNeeded) {
+                                                      // Regular click to increment
+                                                      incrementChapterRevision(exam.id, subjectIdx, chapterIdx);
+                                                    }
+                                                  }
+                                                }}
+                                                onContextMenu={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  if (!editingExam && revisionsCompleted > 0) {
+                                                    // Right-click to decrement
+                                                    decrementChapterRevision(exam.id, subjectIdx, chapterIdx);
+                                                  }
+                                                }}
+                                                className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                                                  revisionsCompleted >= revisionsNeeded 
+                                                    ? 'bg-purple-100 text-purple-700' 
+                                                    : 'bg-orange-100 text-orange-700 cursor-pointer hover:opacity-80'
+                                                }`}
+                                                title={editingExam ? 'Set revision count in edit mode' : 'Click to add • Right-click or Shift+Click to remove'}
+                                                disabled={editingExam === exam.id}
+                                              >
+                                                📚 {revisionsCompleted}/{revisionsNeeded}
+                                              </button>
+                                            )}
+                                            
+                                            {/* Edit Mode: Show all controls */}
+                                            {editingExam === exam.id ? (
+                                              <>
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  max="10"
+                                                  value={revisionsNeeded}
+                                                  onChange={(e) => {
+                                                    const newNeeded = parseInt(e.target.value) || 0;
+                                                    const newCompleted = Math.min(revisionsCompleted, newNeeded);
+                                                    updateChapterRevisions(exam.id, subjectIdx, chapterIdx, newNeeded, newCompleted);
+                                                  }}
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  className="w-12 text-xs px-1 py-1 border rounded text-center"
+                                                  placeholder="Rev"
+                                                  title="Number of revisions needed"
+                                                />
+                                                <select
+                                                  value={chapter.status}
+                                                  onChange={(e) => updateChapterStatus(exam.id, subjectIdx, chapterIdx, e.target.value)}
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  className={`text-xs px-2 py-1 rounded font-medium ${
+                                                    chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                    chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
+                                                    'bg-gray-100 text-gray-600'
+                                                  }`}
+                                                >
+                                                  <option value="pending">Pending</option>
+                                                  <option value="started">Started</option>
+                                                  <option value="completed">Completed</option>
+                                                </select>
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteChapterFromExamSubject(exam.id, subjectIdx, chapterIdx);
+                                                  }}
+                                                  className="text-red-500 hover:text-red-700"
+                                                >
+                                                  <X className="w-3 h-3" />
+                                                </button>
+                                              </>
+                                            ) : (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const statuses = ['pending', 'started', 'completed'];
+                                                  const currentIndex = statuses.indexOf(chapter.status);
+                                                  const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+                                                  updateChapterStatus(exam.id, subjectIdx, chapterIdx, nextStatus);
+                                                }}
+                                                className={`text-xs px-2 py-0.5 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${
                                                   chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
                                                   chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
                                                   'bg-gray-100 text-gray-600'
                                                 }`}
+                                                title="Click to cycle through statuses"
                                               >
-                                                <option value="pending">Pending</option>
-                                                <option value="started">Started</option>
-                                                <option value="completed">Completed</option>
-                                              </select>
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  deleteChapterFromExamSubject(exam.id, subjectIdx, chapterIdx);
-                                                }}
-                                                className="text-red-500 hover:text-red-700"
-                                              >
-                                                <X className="w-3 h-3" />
+                                                {chapter.status}
                                               </button>
-                                            </>
-                                          ) : (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                const statuses = ['pending', 'started', 'completed'];
-                                                const currentIndex = statuses.indexOf(chapter.status);
-                                                const nextStatus = statuses[(currentIndex + 1) % statuses.length];
-                                                updateChapterStatus(exam.id, subjectIdx, chapterIdx, nextStatus);
-                                              }}
-                                              className={`text-xs px-2 py-0.5 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${
-                                                chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
-                                                'bg-gray-100 text-gray-600'
-                                              }`}
-                                              title="Click to cycle through statuses"
-                                            >
-                                              {chapter.status}
-                                            </button>
-                                          )}
-                                        </div>
-                                      ))}
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 )}
@@ -3117,7 +3233,7 @@ const StudyTrackerApp = ({ session }) => {
                                           if (e.target.value) {
                                             setNewExamSubject({
                                               ...newExamSubject,
-                                              chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending' }]
+                                              chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
                                             });
                                             e.target.value = '';
                                           }
@@ -3145,7 +3261,7 @@ const StudyTrackerApp = ({ session }) => {
                                       if (e.key === 'Enter' && examChapterInput.trim()) {
                                         setNewExamSubject({
                                           ...newExamSubject,
-                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending' }]
+                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
                                         });
                                         setExamChapterInput('');
                                       }
@@ -3159,7 +3275,7 @@ const StudyTrackerApp = ({ session }) => {
                                       if (examChapterInput.trim()) {
                                         setNewExamSubject({
                                           ...newExamSubject,
-                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending' }]
+                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
                                         });
                                         setExamChapterInput('');
                                       }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Mail, Lock, User, AlertCircle, CheckCircle, GraduationCap, Book, Target, TrendingUp } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, CheckCircle, Book, Target, TrendingUp } from 'lucide-react';
 import BoyLogo from '../image/Boy.png';
 
 const Auth = () => {
@@ -113,12 +113,12 @@ const Auth = () => {
         <div className="hidden md:block text-white space-y-8 animate-slide-in-left">
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className="bg-white/20 backdrop-blur-lg p-3 rounded-2xl animate-float">
-                <img src={BoyLogo} alt="Kannama Logo" className="w-16 h-16 object-contain" />
+              <div className="bg-white/30 backdrop-blur-lg p-4 rounded-3xl shadow-2xl border-2 border-white/40 animate-float">
+                <img src={BoyLogo} alt="Kannama Logo" className="w-24 h-24 object-contain drop-shadow-2xl" />
               </div>
               <div>
-                <h1 className="text-5xl font-bold">Kannama</h1>
-                <h2 className="text-3xl font-light">Study Tracker</h2>
+                <h1 className="text-5xl font-bold drop-shadow-lg">Kannama</h1>
+                <h2 className="text-3xl font-light opacity-90">Study Tracker</h2>
               </div>
             </div>
             <p className="text-xl text-white/90 font-light">
@@ -172,14 +172,14 @@ const Auth = () => {
             {/* Mobile branding */}
             <div className="md:hidden mb-6 text-center">
               <div className="flex items-center justify-center gap-3 mb-3">
-                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl">
-                  <img src={BoyLogo} alt="Kannama Logo" className="w-10 h-10 object-contain" />
+                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-2xl shadow-lg">
+                  <img src={BoyLogo} alt="Kannama Logo" className="w-16 h-16 object-contain drop-shadow-lg" />
                 </div>
                 <div className="text-left">
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                     Kannama
                   </h1>
-                  <p className="text-sm text-gray-600">Study Tracker</p>
+                  <p className="text-base text-gray-600 font-medium">Study Tracker</p>
                 </div>
               </div>
             </div>

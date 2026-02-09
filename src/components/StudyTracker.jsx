@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 
@@ -1014,6 +1014,17 @@ const StudyTrackerApp = ({ session }) => {
       .sort((a, b) => a.date.localeCompare(b.date));
   };
 
+  const getTodaysReminders = () => {
+    const todayIST = getTodayDateIST();
+    return reminders.filter(r => r.date === todayIST);
+  };
+
+  const getTodaysRecurringReminders = () => {
+    const nowIST = getISTNow();
+    const dayOfWeek = nowIST.getDay();
+    return recurringReminders.filter(r => r.days && r.days.includes(dayOfWeek));
+  };
+
   // Get upcoming exams
   const getUpcomingExams = () => {
     const today = new Date();
@@ -1722,8 +1733,8 @@ const StudyTrackerApp = ({ session }) => {
             </div>
           </div>
         )}
-
-
+          </>
+        )}
 
         {/* Navigation */}
         <div className="bg-white rounded-lg shadow-lg mb-4 p-2 flex gap-2 overflow-x-auto">
@@ -1744,43 +1755,154 @@ const StudyTrackerApp = ({ session }) => {
 
         {/* Daily View */}
         {activeView === 'daily' && (
-          <div className="space-y-4">
-            {/* Daily Suggestions */}
-            {getDailySuggestions().length > 0 && (
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg shadow-lg p-6 border-l-4 border-orange-400">
-                <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  <Target className="w-6 h-6 text-orange-600" />
-                  Today's Focus Suggestions
-                </h2>
+          <div className="space-y-6">
+            {/* Today's Overview Header */}
+            <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-2xl p-8 text-white">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h1 className="text-3xl font-bold mb-2">Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}! 👋</h1>
+                  <p className="text-white/90 text-lg">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                </div>
+                <div className="bg-white/20 backdrop-blur-lg rounded-xl p-4 text-center">
+                  <div className="text-4xl font-bold">{getTodayTasks().length}</div>
+                  <div className="text-sm text-white/80">Tasks Today</div>
+                </div>
+              </div>
+              
+              {/* Quick Stats */}
+              <div className="grid grid-cols-3 gap-4 mt-6">
+                <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">{getTodayTasks().filter(t => t.completed).length}/{getTodayTasks().length}</div>
+                  <div className="text-xs text-white/80">Completed</div>
+                </div>
+                <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">{getTodaysReminders().length + getTodaysRecurringReminders().length}</div>
+                  <div className="text-xs text-white/80">Reminders</div>
+                </div>
+                <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">{getDailySuggestions().filter(s => s.priority === 'high').length}</div>
+                  <div className="text-xs text-white/80">Urgent</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Today's Notifications & Reminders */}
+            {(getDailySuggestions().length > 0 || getTodaysReminders().length > 0 || getTodaysRecurringReminders().length > 0) && (
+              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg p-2">
+                    <AlertCircle className="w-6 h-6 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-800">Today's Notifications</h2>
+                  <span className="ml-auto bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-bold">
+                    {getDailySuggestions().length + getTodaysReminders().length + getTodaysRecurringReminders().length}
+                  </span>
+                </div>
+                
                 <div className="space-y-3">
+                  {/* Today's Reminders */}
+                  {getTodaysReminders().map((reminder) => (
+                    <div key={reminder.id} className="flex items-start gap-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-orange-400 rounded-lg hover:shadow-md transition-all">
+                      <div className="bg-orange-100 rounded-full p-2 flex-shrink-0">
+                        <Clock className="w-5 h-5 text-orange-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded">TODAY</span>
+                          <span className="font-bold text-gray-800">{reminder.title}</span>
+                        </div>
+                        {reminder.description && (
+                          <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={(e) => {e.stopPropagation(); startEditReminder(reminder);}}
+                          className="text-blue-500 hover:text-blue-700 p-1"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {e.stopPropagation(); deleteReminder(reminder.id);}}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Today's Recurring Reminders */}
+                  {getTodaysRecurringReminders().map((reminder) => (
+                    <div key={reminder.id} className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-indigo-400 rounded-lg hover:shadow-md transition-all">
+                      <div className="bg-indigo-100 rounded-full p-2 flex-shrink-0">
+                        <Clock className="w-5 h-5 text-indigo-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-indigo-500 text-white text-xs font-bold rounded">RECURRING</span>
+                          <span className="font-bold text-gray-800">{reminder.title}</span>
+                        </div>
+                        <div className="text-sm text-gray-600 flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          <span>{reminder.time}{reminder.end_time && ` - ${reminder.end_time}`}</span>
+                        </div>
+                        {reminder.description && (
+                          <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={(e) => {e.stopPropagation(); startEditRecurringReminder(reminder);}}
+                          className="text-blue-500 hover:text-blue-700 p-1"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {e.stopPropagation(); deleteRecurringReminder(reminder.id);}}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Study Suggestions */}
                   {getDailySuggestions().map((suggestion, i) => (
                     <div 
                       key={i} 
-                      className={`p-3 rounded-lg border-l-4 ${
+                      className={`flex items-start gap-3 p-4 rounded-lg border-l-4 hover:shadow-md transition-all ${
                         suggestion.priority === 'high' 
-                          ? 'bg-red-50 border-red-400' 
-                          : 'bg-blue-50 border-blue-400'
+                          ? 'bg-gradient-to-r from-red-50 to-pink-50 border-red-500' 
+                          : 'bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-500'
                       }`}
                     >
-                      <div className="flex items-start gap-3">
+                      <div className={`rounded-full p-2 flex-shrink-0 ${
+                        suggestion.priority === 'high' ? 'bg-red-100' : 'bg-blue-100'
+                      }`}>
                         {suggestion.priority === 'high' ? (
-                          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                          <AlertCircle className="w-5 h-5 text-red-600" />
                         ) : (
-                          <Book className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                          <Book className="w-5 h-5 text-blue-600" />
                         )}
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-800">{suggestion.message}</div>
-                          <div className="text-sm text-gray-600">{suggestion.details}</div>
-                          {suggestion.chapters && suggestion.chapters.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Focus: {suggestion.chapters.join(', ')}
-                            </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          {suggestion.priority === 'high' && (
+                            <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded">URGENT</span>
                           )}
+                          <span className="font-bold text-gray-800">{suggestion.message}</span>
                         </div>
-                        {suggestion.priority === 'high' && (
-                          <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded">
-                            URGENT
-                          </span>
+                        <p className="text-sm text-gray-600">{suggestion.details}</p>
+                        {suggestion.chapters && suggestion.chapters.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {suggestion.chapters.map((ch, idx) => (
+                              <span key={idx} className="px-2 py-0.5 bg-white border border-gray-200 rounded text-xs text-gray-700">
+                                {ch}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1788,326 +1910,361 @@ const StudyTrackerApp = ({ session }) => {
                 </div>
               </div>
             )}
-            
-            {/* Quick Add Task */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-800">Quick Add Task</h2>
-                <button
-                  onClick={() => startVoiceInput((text) => {
-                    setNewTask({ ...newTask, activity: text });
-                    setShowAddTask(true);
-                  })}
-                  className={`p-2 rounded-full ${isListening ? 'bg-red-500' : 'bg-indigo-600'} text-white`}
-                >
-                  <Mic className="w-5 h-5" />
-                </button>
-              </div>
-              
-              {showAddTask ? (
-                <div className="space-y-3">
-                  <select
-                    value={newTask.subject}
-                    onChange={(e) => setNewTask({ ...newTask, subject: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Today's Tasks */}
+              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg p-2">
+                      <CheckCircle className="w-6 h-6 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800">Today's Tasks</h2>
+                  </div>
+                  <button
+                    onClick={() => startVoiceInput((text) => {
+                      setNewTask({ ...newTask, activity: text });
+                      setShowAddTask(true);
+                    })}
+                    className={`p-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-indigo-600 hover:bg-indigo-700'} text-white transition-all`}
+                    title="Voice input"
                   >
-                    <option value="">Select Subject</option>
-                    {subjects.map(s => (
-                      <option key={s.id} value={s.name}>{s.name}</option>
-                    ))}
-                  </select>
-                  
-                  {newTask.subject && (
+                    <Mic className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                {showAddTask ? (
+                  <div className="space-y-3 mb-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200">
                     <select
-                      value={newTask.chapter}
-                      onChange={(e) => setNewTask({ ...newTask, chapter: e.target.value })}
-                      className="w-full p-2 border rounded-lg"
+                      value={newTask.subject}
+                      onChange={(e) => setNewTask({ ...newTask, subject: e.target.value })}
+                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     >
-                      <option value="">Select Chapter (Optional)</option>
-                      {subjects.find(s => s.name === newTask.subject)?.chapters?.map((ch, i) => (
-                        <option key={i} value={ch}>{ch}</option>
+                      <option value="">Select Subject</option>
+                      {subjects.map(s => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
                       ))}
                     </select>
-                  )}
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-700">Activity</label>
-                      <button
-                        onClick={() => setShowActivitiesManager(true)}
-                        className="text-xs text-indigo-600 hover:text-indigo-700"
+                    
+                    {newTask.subject && (
+                      <select
+                        value={newTask.chapter}
+                        onChange={(e) => setNewTask({ ...newTask, chapter: e.target.value })}
+                        className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       >
-                        Manage Activities
-                      </button>
+                        <option value="">Select Chapter (Optional)</option>
+                        {subjects.find(s => s.name === newTask.subject)?.chapters?.map((ch, i) => (
+                          <option key={i} value={ch}>{ch}</option>
+                        ))}
+                      </select>
+                    )}
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-semibold text-gray-700">Activity</label>
+                        <button
+                          onClick={() => setShowActivitiesManager(true)}
+                          className="text-xs px-2 py-1 text-indigo-600 hover:bg-indigo-50 rounded font-semibold"
+                        >
+                          Manage Activities
+                        </button>
+                      </div>
+                      
+                      <select
+                        value={standardActivities.includes(newTask.activity) ? newTask.activity : 'custom'}
+                        onChange={(e) => {
+                          if (e.target.value === 'custom') {
+                            setNewTask({ ...newTask, activity: '' });
+                          } else {
+                            setNewTask({ ...newTask, activity: e.target.value });
+                          }
+                        }}
+                        className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="">Select Activity (Optional)</option>
+                        {standardActivities.map((act, i) => (
+                          <option key={i} value={act}>{act}</option>
+                        ))}
+                        <option value="custom">--- Custom Activity ---</option>
+                      </select>
                     </div>
                     
-                    <select
-                      value={standardActivities.includes(newTask.activity) ? newTask.activity : 'custom'}
-                      onChange={(e) => {
-                        if (e.target.value === 'custom') {
-                          setNewTask({ ...newTask, activity: '' });
-                        } else {
-                          setNewTask({ ...newTask, activity: e.target.value });
-                        }
-                      }}
-                      className="w-full p-2 border rounded-lg"
-                    >
-                      <option value="">Select Activity (Optional)</option>
-                      {standardActivities.map((act, i) => (
-                        <option key={i} value={act}>{act}</option>
-                      ))}
-                      <option value="custom">--- Custom Activity ---</option>
-                    </select>
-                  </div>
-                  
-                  {(!standardActivities.includes(newTask.activity) || newTask.activity === '') && (
+                    {(!standardActivities.includes(newTask.activity) || newTask.activity === '') && (
+                      <input
+                        type="text"
+                        placeholder="Enter custom activity or leave blank"
+                        value={standardActivities.includes(newTask.activity) ? '' : newTask.activity}
+                        onChange={(e) => setNewTask({ ...newTask, activity: e.target.value })}
+                        className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    )}
+                    
                     <input
-                      type="text"
-                      placeholder="Enter custom activity or leave blank"
-                      value={standardActivities.includes(newTask.activity) ? '' : newTask.activity}
-                      onChange={(e) => setNewTask({ ...newTask, activity: e.target.value })}
-                      className="w-full p-2 border rounded-lg"
+                      type="number"
+                      value={newTask.duration}
+                      onChange={(e) => setNewTask({ ...newTask, duration: parseInt(e.target.value) })}
+                      placeholder="Duration (minutes)"
+                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
-                  )}
-                  
-                  <input
-                    type="number"
-                    value={newTask.duration}
-                    onChange={(e) => setNewTask({ ...newTask, duration: parseInt(e.target.value) })}
-                    placeholder="Duration (minutes)"
-                    className="w-full p-2 border rounded-lg"
-                  />
-                  
-                  <textarea
-                    value={newTask.instructions}
-                    onChange={(e) => setNewTask({ ...newTask, instructions: e.target.value })}
-                    placeholder="Instructions or notes (optional)"
-                    className="w-full p-2 border rounded-lg"
-                    rows="2"
-                  />
-                  
-                  <div className="flex gap-2">
-                    <button
-                      onClick={addTask}
-                      className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700"
-                    >
-                      Add Task
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAddTask(false);
-                        setNewTask({ 
-                          subject: '', 
-                          chapter: '', 
-                          activity: '', 
-                          duration: 30, 
-                          date: getTodayDateIST(),
-                          completed: false,
-                          instructions: ''
-                        });
-                      }}
-                      className="px-4 bg-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-300"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowAddTask(true)}
-                  className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-gray-500 hover:border-indigo-400 hover:text-indigo-600"
-                >
-                  <Plus className="w-5 h-5 mx-auto" />
-                </button>
-              )}
-            </div>
-
-            {/* Today's Tasks */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Today's Tasks</h2>
-              {getTodayTasks().length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No tasks for today</p>
-              ) : (
-                <div className="space-y-2">
-                  {getTodayTasks().map(task => (
-                    <div
-                      key={task.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border ${
-                        task.completed ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
-                      }`}
-                    >
+                    
+                    <textarea
+                      value={newTask.instructions}
+                      onChange={(e) => setNewTask({ ...newTask, instructions: e.target.value })}
+                      placeholder="Instructions or notes (optional)"
+                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      rows="2"
+                    />
+                    
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => toggleTaskComplete(task.id)}
-                        className="flex-shrink-0"
+                        onClick={addTask}
+                        className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg hover:shadow-xl transition-all"
                       >
-                        {task.completed ? (
-                          <CheckCircle className="w-6 h-6 text-green-600" />
-                        ) : (
-                          <Circle className="w-6 h-6 text-gray-400" />
-                        )}
+                        Add Task
                       </button>
-                      <div className="flex-1">
-                        <div className={`font-medium ${task.completed ? 'line-through text-gray-500' : 'text-gray-800'}`}>
-                          {task.subject} - {task.activity}
-                        </div>
-                        {task.chapter && (
-                          <div className="text-sm text-gray-500">{task.chapter}</div>
-                        )}
-                        {task.instructions && (
-                          <div className="text-sm text-gray-600 mt-1 italic">{task.instructions}</div>
-                        )}
-                        <div className="text-xs text-gray-400">{task.duration} mins</div>
-                      </div>
                       <button
-                        onClick={() => deleteTask(task.id)}
-                        className="text-red-500 hover:text-red-700"
+                        onClick={() => {
+                          setShowAddTask(false);
+                          setNewTask({ 
+                            subject: '', 
+                            chapter: '', 
+                            activity: '', 
+                            duration: 30, 
+                            date: getTodayDateIST(),
+                            completed: false,
+                            instructions: ''
+                          });
+                        }}
+                        className="px-6 bg-gray-200 text-gray-600 py-3 rounded-lg hover:bg-gray-300 font-semibold transition-all"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        Cancel
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowAddTask(true)}
+                    className="w-full border-2 border-dashed border-indigo-300 rounded-xl py-4 text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 transition-all mb-4 group"
+                  >
+                    <Plus className="w-6 h-6 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                    <span className="font-semibold">Add New Task</span>
+                  </button>
+                )}
 
-            {/* Upcoming Reminders */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-800">School Reminders</h2>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowRecurringReminderForm(!showRecurringReminderForm)}
-                    className="text-xs px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 font-semibold"
-                    title="Recurring (e.g., Tuition every Mon/Wed/Thu)"
-                  >
-                    ↻ Recurring
-                  </button>
-                  <button
-                    onClick={() => {
-                      const todayDate = getTodayDateIST();
-                      setNewReminder({ title: '', date: todayDate, description: '' });
-                      setShowAddReminder(true);
-                    }}
-                    className="text-indigo-600 hover:text-indigo-700"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              
-              {showAddReminder && (
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Reminder title"
-                    value={newReminder.title}
-                    onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
-                  />
-                  <input
-                    type="date"
-                    value={newReminder.date}
-                    onChange={(e) => setNewReminder({ ...newReminder, date: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
-                  />
-                  <textarea
-                    placeholder="Description (optional)"
-                    value={newReminder.description}
-                    onChange={(e) => setNewReminder({ ...newReminder, description: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
-                    rows="2"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={addReminder}
-                      className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700"
-                    >
-                      Add
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAddReminder(false);
-                        setNewReminder({ title: '', date: '', description: '' });
-                      }}
-                      className="px-4 bg-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-300"
-                    >
-                      Cancel
-                    </button>
+                {getTodayTasks().length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="bg-gray-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-3">
+                      <CheckCircle className="w-10 h-10 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500">No tasks for today</p>
+                    <p className="text-sm text-gray-400 mt-1">Add a task to get started!</p>
                   </div>
-                </div>
-              )}
-              
-              {editingReminder ? (
-                <div className="mb-4 p-4 bg-indigo-50 rounded-lg space-y-3 border border-indigo-200">
-                  <h3 className="font-semibold text-gray-800">Edit Reminder</h3>
-                  <input
-                    type="text"
-                    placeholder="Reminder title"
-                    value={editReminderData.title}
-                    onChange={(e) => setEditReminderData({ ...editReminderData, title: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
-                  />
-                  <input
-                    type="date"
-                    value={editReminderData.date}
-                    onChange={(e) => setEditReminderData({ ...editReminderData, date: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
-                  />
-                  <textarea
-                    placeholder="Description (optional)"
-                    value={editReminderData.description}
-                    onChange={(e) => setEditReminderData({ ...editReminderData, description: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
-                    rows="2"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={saveEditReminder}
-                      className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingReminder(null);
-                        setEditReminderData({ title: '', date: '', description: '' });
-                      }}
-                      className="px-4 bg-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-300"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              
-              {getUpcomingReminders().length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No upcoming reminders</p>
-              ) : (
-                <div className="space-y-2">
-                  {getUpcomingReminders().map(reminder => (
-                    <div key={reminder.id} className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors" onClick={() => setExpandedReminders({...expandedReminders, [reminder.id]: !expandedReminders[reminder.id]})}>
-                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-800">{reminder.title}</div>
-                        <div className="text-sm text-gray-600">{new Date(reminder.date).toLocaleDateString()}</div>
-                        {reminder.description && (
-                          <div className={`text-sm text-gray-500 mt-1 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? "" : "line-clamp-2"}`}>{reminder.description}{!expandedReminders[reminder.id] && <span className="text-indigo-600 font-semibold ml-1">... (click to expand)</span>}</div>
-                        )}
+                ) : (
+                  <div className="space-y-2">
+                    {getTodayTasks().map(task => (
+                      <div
+                        key={task.id}
+                        className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all hover:shadow-md ${
+                          task.completed 
+                            ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200' 
+                            : 'bg-white border-gray-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        <button
+                          onClick={() => toggleTaskComplete(task.id)}
+                          className="flex-shrink-0 transition-all hover:scale-110"
+                        >
+                          {task.completed ? (
+                            <CheckCircle className="w-7 h-7 text-green-600" />
+                          ) : (
+                            <Circle className="w-7 h-7 text-gray-400" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <div className={`font-semibold ${task.completed ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                            {task.subject} {task.activity && `- ${task.activity}`}
+                          </div>
+                          {task.chapter && (
+                            <div className="text-sm text-indigo-600 font-medium">{task.chapter}</div>
+                          )}
+                          {task.instructions && (
+                            <div className="text-sm text-gray-600 mt-1 italic">{task.instructions}</div>
+                          )}
+                          <div className="flex items-center gap-2 mt-1">
+                            <Clock className="w-3 h-3 text-gray-400" />
+                            <span className="text-xs text-gray-500">{task.duration} mins</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => deleteTask(task.id)}
+                          className="flex-shrink-0 text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       </div>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button
-                          onClick={(e) => {e.stopPropagation(); startEditReminder(reminder);}}
-                          className="text-blue-500 hover:text-blue-700"
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={(e) => {e.stopPropagation(); deleteReminder(reminder.id);}}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* School Reminders Management */}
+              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-lg p-2">
+                      <Bell className="w-6 h-6 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800">Reminders</h2>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowRecurringReminderForm(!showRecurringReminderForm)}
+                      className="text-xs px-3 py-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-all"
+                      title="Recurring (e.g., Tuition every Mon/Wed/Thu)"
+                    >
+                      ↻ Recurring
+                    </button>
+                    <button
+                      onClick={() => {
+                        const todayDate = getTodayDateIST();
+                        setNewReminder({ title: '', date: todayDate, description: '' });
+                        setShowAddReminder(true);
+                      }}
+                      className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                
+                {showAddReminder && (
+                  <div className="mb-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200 space-y-3">
+                    <h3 className="font-bold text-gray-800">Add One-Time Reminder</h3>
+                    <input
+                      type="text"
+                      placeholder="Reminder title"
+                      value={newReminder.title}
+                      onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
+                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <input
+                      type="date"
+                      value={newReminder.date}
+                      onChange={(e) => setNewReminder({ ...newReminder, date: e.target.value })}
+                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <textarea
+                      placeholder="Description (optional)"
+                      value={newReminder.description}
+                      onChange={(e) => setNewReminder({ ...newReminder, description: e.target.value })}
+                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      rows="2"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={addReminder}
+                        className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg transition-all"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowAddReminder(false);
+                          setNewReminder({ title: '', date: '', description: '' });
+                        }}
+                        className="px-6 bg-gray-200 text-gray-600 py-3 rounded-lg hover:bg-gray-300 font-semibold transition-all"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {editingReminder && (
+                  <div className="mb-4 p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border-2 border-blue-200 space-y-3">
+                    <h3 className="font-bold text-gray-800">Edit Reminder</h3>
+                    <input
+                      type="text"
+                      placeholder="Reminder title"
+                      value={editReminderData.title}
+                      onChange={(e) => setEditReminderData({ ...editReminderData, title: e.target.value })}
+                      className="w-full p-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <input
+                      type="date"
+                      value={editReminderData.date}
+                      onChange={(e) => setEditReminderData({ ...editReminderData, date: e.target.value })}
+                      className="w-full p-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <textarea
+                      placeholder="Description (optional)"
+                      value={editReminderData.description}
+                      onChange={(e) => setEditReminderData({ ...editReminderData, description: e.target.value })}
+                      className="w-full p-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      rows="2"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveEditReminder}
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-cyan-700 font-semibold shadow-lg transition-all"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingReminder(null);
+                          setEditReminderData({ title: '', date: '', description: '' });
+                        }}
+                        className="px-6 bg-gray-200 text-gray-600 py-3 rounded-lg hover:bg-gray-300 font-semibold transition-all"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              
+              <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+                Upcoming Reminders
+              </h3>
+              {getUpcomingReminders().length === 0 ? (
+                <p className="text-gray-500 text-center py-8 italic">No upcoming reminders</p>
+              ) : (
+                <div className="space-y-3">
+                  {getUpcomingReminders().map(reminder => (
+                    <div 
+                      key={reminder.id} 
+                      className="group p-4 bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-xl cursor-pointer hover:shadow-lg transition-all" 
+                      onClick={() => setExpandedReminders({...expandedReminders, [reminder.id]: !expandedReminders[reminder.id]})}
+                    >
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-1" />
+                        <div className="flex-1">
+                          <div className="font-bold text-gray-800">{reminder.title}</div>
+                          <div className="text-sm text-gray-600 mt-1">📅 {new Date(reminder.date).toLocaleDateString()}</div>
+                          {reminder.description && (
+                            <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? "" : "line-clamp-2"}`}>
+                              {reminder.description}
+                              {!expandedReminders[reminder.id] && <span className="text-amber-700 font-semibold ml-1">... (click to expand)</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => {e.stopPropagation(); startEditReminder(reminder);}}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {e.stopPropagation(); deleteReminder(reminder.id);}}
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -2115,32 +2272,32 @@ const StudyTrackerApp = ({ session }) => {
               )}
               
               {showRecurringReminderForm && (
-                <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3 border border-blue-200">
-                  <h3 className="font-semibold text-gray-800">{editingRecurringReminder ? 'Edit Recurring Reminder' : 'Add Recurring Reminder'}</h3>
+                <div className="mb-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-300 space-y-4 shadow-lg">
+                  <h3 className="font-bold text-gray-800 text-lg">{editingRecurringReminder ? '✏️ Edit Recurring Reminder' : '➕ Add Recurring Reminder'}</h3>
                   <input
                     type="text"
                     placeholder="Reminder title (e.g., Tuition, Sports class)"
                     value={newRecurringReminder.title}
                     onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, title: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
+                    className="w-full p-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
                   />
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <label className="text-xs text-gray-600 font-semibold block mb-1">Start Time</label>
+                      <label className="text-sm text-gray-700 font-bold block mb-2">🕐 Start Time</label>
                       <input
                         type="time"
                         value={newRecurringReminder.time}
                         onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, time: e.target.value })}
-                        className="w-full p-2 border rounded-lg"
+                        className="w-full p-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                     <div className="flex-1">
-                      <label className="text-xs text-gray-600 font-semibold block mb-1">End Time</label>
+                      <label className="text-sm text-gray-700 font-bold block mb-2">🕐 End Time</label>
                       <input
                         type="time"
                         value={newRecurringReminder.end_time}
                         onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, end_time: e.target.value })}
-                        className="w-full p-2 border rounded-lg"
+                        className="w-full p-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                   </div>
@@ -2148,11 +2305,11 @@ const StudyTrackerApp = ({ session }) => {
                     placeholder="Description (optional)"
                     value={newRecurringReminder.description}
                     onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, description: e.target.value })}
-                    className="w-full p-2 border rounded-lg"
+                    className="w-full p-3 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="2"
                   />
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700">Select Days:</label>
+                    <label className="text-sm font-bold text-gray-700">📅 Select Days:</label>
                     <div className="flex flex-wrap gap-2">
                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
                         <button
@@ -2163,10 +2320,10 @@ const StudyTrackerApp = ({ session }) => {
                               : [...newRecurringReminder.days, idx];
                             setNewRecurringReminder({ ...newRecurringReminder, days: newDays });
                           }}
-                          className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                          className={`px-4 py-2 rounded-lg font-bold transition-all shadow-md ${
                             newRecurringReminder.days.includes(idx)
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white scale-105'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
                         >
                           {day}
@@ -2177,9 +2334,9 @@ const StudyTrackerApp = ({ session }) => {
                   <div className="flex gap-2">
                     <button
                       onClick={editingRecurringReminder ? saveEditRecurringReminder : addRecurringReminder}
-                      className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
+                      className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 font-bold shadow-lg transition-all"
                     >
-                      {editingRecurringReminder ? 'Save Changes' : 'Add Recurring Reminder'}
+                      {editingRecurringReminder ? '💾 Save Changes' : '➕ Add Recurring Reminder'}
                     </button>
                     <button
                       onClick={() => {
@@ -2187,7 +2344,7 @@ const StudyTrackerApp = ({ session }) => {
                         setEditingRecurringReminder(null);
                         setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
                       }}
-                      className="px-4 bg-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-300"
+                      className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 font-bold transition-all"
                     >
                       Cancel
                     </button>
@@ -2196,17 +2353,17 @@ const StudyTrackerApp = ({ session }) => {
               )}
             </div>
           </div>
-        )}
-
 
             {/* Recurring Reminders */}
             {recurringReminders.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6 mt-6">
-                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  Recurring Reminders
-                  <span className="text-sm text-gray-600 font-normal">(Shows on scheduled days)</span>
-                </h2>
-                <div className="space-y-2">
+              <div className="bg-white rounded-xl shadow-xl p-6 mt-6 border-2 border-purple-200">
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent flex items-center gap-2">
+                    🔁 Recurring Reminders
+                  </h2>
+                  <span className="text-sm text-gray-600 bg-purple-50 px-3 py-1 rounded-full font-semibold">Shows on scheduled days</span>
+                </div>
+                <div className="space-y-3">
                   {recurringReminders.map(reminder => {
                     const todayDayOfWeek = getTodayDayOfWeekIST();
                     const isToday = reminder.days.includes(todayDayOfWeek);
@@ -2216,48 +2373,55 @@ const StudyTrackerApp = ({ session }) => {
                     return (
                       <div 
                         key={reminder.id} 
-                        className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                        className={`group p-4 rounded-xl cursor-pointer transition-all hover:shadow-lg ${
                           isToday 
-                            ? 'bg-green-100 border-2 border-green-500 hover:bg-green-150' 
-                            : 'bg-blue-50 border border-blue-200 hover:bg-blue-100'
+                            ? 'bg-gradient-to-br from-green-100 to-emerald-100 border-2 border-green-400 shadow-md' 
+                            : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200'
                         }`}
                         onClick={() => setExpandedReminders({...expandedReminders, [reminder.id]: !expandedReminders[reminder.id]})}
                       >
-                        <div className="flex-shrink-0">
-                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                            isToday ? 'bg-green-500 text-white' : 'bg-blue-400 text-white'
-                          }`}>
-                            ?
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-800">
-                            {reminder.title}
-                            {isToday && <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded">TODAY {convertTo12Hour(reminder.time)}-{convertTo12Hour(reminder.end_time)}</span>}
-                          </div>
-                          <div className="text-sm text-gray-600">{daysNames}</div>
-                          <div className="text-sm text-blue-600 font-medium">{convertTo12Hour(reminder.time)} - {convertTo12Hour(reminder.end_time)}</div>
-                          {reminder.description && (
-                            <div className={`text-sm text-gray-500 mt-1 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? '' : 'line-clamp-2'}`}>
-                              {reminder.description}
-                              {!expandedReminders[reminder.id] && <span className="text-blue-600 font-semibold ml-1">... (click to expand)</span>}
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 mt-1">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-md ${
+                              isToday ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white animate-pulse' : 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
+                            }`}>
+                              {isToday ? '⭐' : '🔔'}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button
-                            onClick={(e) => {e.stopPropagation(); startEditRecurringReminder(reminder);}}
-                            className="text-blue-500 hover:text-blue-700"
-                            title="Edit"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={(e) => {e.stopPropagation(); deleteRecurringReminder(reminder.id);}}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-bold text-gray-800 text-lg flex items-center gap-2 flex-wrap">
+                              {reminder.title}
+                              {isToday && (
+                                <span className="text-xs bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 py-1 rounded-full font-bold shadow-md">
+                                  ✨ TODAY {convertTo12Hour(reminder.time)}-{convertTo12Hour(reminder.end_time)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-700 font-semibold mt-1">📅 {daysNames}</div>
+                            <div className="text-sm text-blue-700 font-bold mt-1">🕐 {convertTo12Hour(reminder.time)} - {convertTo12Hour(reminder.end_time)}</div>
+                            {reminder.description && (
+                              <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? '' : 'line-clamp-2'}`}>
+                                {reminder.description}
+                                {!expandedReminders[reminder.id] && <span className="text-blue-700 font-bold ml-1">... (click to expand)</span>}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button
+                              onClick={(e) => {e.stopPropagation(); startEditRecurringReminder(reminder);}}
+                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {e.stopPropagation(); deleteRecurringReminder(reminder.id);}}
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -2265,6 +2429,9 @@ const StudyTrackerApp = ({ session }) => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
         {/* Subjects View */}
         {activeView === 'subjects' && (
           <div className="bg-white rounded-lg shadow-lg p-6">
@@ -3536,8 +3703,6 @@ const StudyTrackerApp = ({ session }) => {
               <SchoolDocuments profileId={activeProfile?.id} />
             </div>
           </div>
-        )}
-        </>
         )}
       </div>
     </div>

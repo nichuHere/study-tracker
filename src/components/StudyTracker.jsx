@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 
@@ -101,6 +101,11 @@ const StudyTrackerApp = ({ session }) => {
   const [todayNotificationsMinimized, setTodayNotificationsMinimized] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState([]);
   const [showAllReminders, setShowAllReminders] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [selectedDate, setSelectedDate] = useState(null);
 
   // Load account name from metadata or localStorage
   useEffect(() => {
@@ -2309,7 +2314,7 @@ const StudyTrackerApp = ({ session }) => {
 
         {/* Navigation */}
         <div className="bg-white rounded-lg shadow-lg mb-4 p-2 flex gap-2 overflow-x-auto">
-          {['daily', 'analytics', 'subjects', 'exams', 'docs'].map(view => (
+          {['daily', 'calendar', 'analytics', 'subjects', 'exams', 'docs'].map(view => (
             <button
               key={view}
               onClick={() => setActiveView(view)}
@@ -4520,6 +4525,333 @@ const StudyTrackerApp = ({ session }) => {
                 Last 14 days
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Calendar View */}
+        {activeView === 'calendar' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              {/* Calendar Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-3">
+                  <Calendar className="w-8 h-8 text-indigo-600" />
+                  Calendar
+                </h2>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => {
+                      const newMonth = calendarMonth.month === 0 ? 11 : calendarMonth.month - 1;
+                      const newYear = calendarMonth.month === 0 ? calendarMonth.year - 1 : calendarMonth.year;
+                      setCalendarMonth({ year: newYear, month: newMonth });
+                      setSelectedDate(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                  >
+                    <ChevronLeft className="w-6 h-6 text-gray-700" />
+                  </button>
+                  <div className="text-xl font-bold text-gray-800 min-w-[200px] text-center">
+                    {new Date(calendarMonth.year, calendarMonth.month).toLocaleDateString('en-US', { 
+                      month: 'long', 
+                      year: 'numeric' 
+                    })}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newMonth = calendarMonth.month === 11 ? 0 : calendarMonth.month + 1;
+                      const newYear = calendarMonth.month === 11 ? calendarMonth.year + 1 : calendarMonth.year;
+                      setCalendarMonth({ year: newYear, month: newMonth });
+                      setSelectedDate(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                  >
+                    <ChevronRight className="w-6 h-6 text-gray-700" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const now = new Date();
+                      setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
+                      setSelectedDate(getTodayDateIST());
+                    }}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all font-semibold"
+                  >
+                    Today
+                  </button>
+                </div>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-2">
+                {/* Day Headers */}
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-center font-bold text-gray-600 py-2 bg-gray-50 rounded-lg">
+                    {day}
+                  </div>
+                ))}
+
+                {/* Calendar Days */}
+                {(() => {
+                  const firstDay = new Date(calendarMonth.year, calendarMonth.month, 1);
+                  const lastDay = new Date(calendarMonth.year, calendarMonth.month + 1, 0);
+                  const startingDayOfWeek = firstDay.getDay();
+                  const daysInMonth = lastDay.getDate();
+                  
+                  const days = [];
+                  const today = getTodayDateIST();
+                  
+                  // Add empty cells for days before month starts
+                  for (let i = 0; i < startingDayOfWeek; i++) {
+                    days.push(<div key={`empty-${i}`} className="min-h-[120px] bg-gray-50 rounded-lg"></div>);
+                  }
+                  
+                  // Add cells for each day of the month
+                  for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const isToday = dateStr === today;
+                    const dayOfWeek = new Date(calendarMonth.year, calendarMonth.month, day).getDay();
+                    
+                    // Get events for this date
+                    const dayReminders = reminders.filter(r => r.date === dateStr);
+                    const dayRecurringReminders = recurringReminders.filter(r => r.days && r.days.includes(dayOfWeek));
+                    const dayExams = [];
+                    
+                    exams.forEach(exam => {
+                      exam.subjects?.forEach(subject => {
+                        if (subject.date === dateStr) {
+                          dayExams.push({
+                            examName: exam.name,
+                            subject: subject.subject
+                          });
+                        }
+                      });
+                    });
+                    
+                    days.push(
+                      <div 
+                        key={day} 
+                        onClick={() => setSelectedDate(dateStr)}
+                        className={`min-h-[120px] p-2 rounded-lg border-2 transition-all cursor-pointer ${
+                          selectedDate === dateStr
+                            ? 'bg-gradient-to-br from-purple-100 to-pink-100 border-purple-500 shadow-lg ring-2 ring-purple-300'
+                            : isToday 
+                            ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-400 shadow-md hover:shadow-lg' 
+                            : 'bg-white border-gray-200 hover:border-indigo-300 hover:shadow-md'
+                        }`}
+                      >
+                        <div className={`text-sm font-bold mb-1 ${
+                          isToday ? 'text-indigo-600' : 'text-gray-700'
+                        }`}>
+                          {day}
+                          {isToday && <span className="ml-1 text-xs bg-indigo-600 text-white px-2 py-0.5 rounded-full">Today</span>}
+                        </div>
+                        
+                        <div className="space-y-1 overflow-y-auto max-h-[90px]">
+                          {/* Exams */}
+                          {dayExams.map((exam, idx) => (
+                            <div 
+                              key={`exam-${idx}`}
+                              className="text-xs p-1.5 bg-gradient-to-r from-red-100 to-pink-100 border border-red-300 rounded text-red-700 font-semibold truncate"
+                              title={`${exam.examName} - ${exam.subject}`}
+                            >
+                              📝 {exam.subject}
+                            </div>
+                          ))}
+                          
+                          {/* One-time Reminders */}
+                          {dayReminders.map(reminder => (
+                            <div 
+                              key={`reminder-${reminder.id}`}
+                              className="text-xs p-1.5 bg-gradient-to-r from-amber-100 to-yellow-100 border border-amber-300 rounded text-amber-700 font-semibold truncate"
+                              title={reminder.title}
+                            >
+                              🔔 {reminder.title}
+                            </div>
+                          ))}
+                          
+                          {/* Recurring Reminders */}
+                          {dayRecurringReminders.map(reminder => (
+                            <div 
+                              key={`recurring-${reminder.id}`}
+                              className="text-xs p-1.5 bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-300 rounded text-blue-700 font-semibold truncate"
+                              title={`${reminder.title} (${convertTo12Hour(reminder.time)}-${convertTo12Hour(reminder.end_time)})`}
+                            >
+                              🔁 {reminder.title}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return days;
+                })()}
+              </div>
+
+              {/* Legend */}
+              <div className="mt-6 flex flex-wrap gap-4 justify-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-gradient-to-r from-red-100 to-pink-100 border border-red-300 rounded"></div>
+                  <span className="text-sm text-gray-700 font-medium">Exams</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-gradient-to-r from-amber-100 to-yellow-100 border border-amber-300 rounded"></div>
+                  <span className="text-sm text-gray-700 font-medium">Reminders</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-300 rounded"></div>
+                  <span className="text-sm text-gray-700 font-medium">Recurring</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Selected Day Events */}
+            {selectedDate && (() => {
+              const selectedDateObj = new Date(selectedDate);
+              const dayOfWeek = selectedDateObj.getDay();
+              const isToday = selectedDate === getTodayDateIST();
+              
+              // Get events for selected date
+              const dayReminders = reminders.filter(r => r.date === selectedDate);
+              const dayRecurringReminders = recurringReminders.filter(r => r.days && r.days.includes(dayOfWeek));
+              const dayExams = [];
+              
+              exams.forEach(exam => {
+                exam.subjects?.forEach(subject => {
+                  if (subject.date === selectedDate) {
+                    dayExams.push({
+                      examId: exam.id,
+                      examName: exam.name,
+                      subject: subject.subject,
+                      chapters: subject.chapters || [],
+                      keyPoints: subject.keyPoints
+                    });
+                  }
+                });
+              });
+              
+              const hasEvents = dayExams.length > 0 || dayReminders.length > 0 || dayRecurringReminders.length > 0;
+              
+              return (
+                <div className="mt-4 bg-white rounded-2xl shadow-xl p-6 border-2 border-purple-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                      <Calendar className="w-6 h-6 text-purple-600" />
+                      {selectedDateObj.toLocaleDateString('en-US', { 
+                        weekday: 'long',
+                        month: 'long', 
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                      {isToday && <span className="text-sm bg-indigo-600 text-white px-3 py-1 rounded-full">Today</span>}
+                    </h3>
+                    <button
+                      onClick={() => setSelectedDate(null)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                      title="Close"
+                    >
+                      <X className="w-5 h-5 text-gray-600" />
+                    </button>
+                  </div>
+                  
+                  {!hasEvents ? (
+                    <p className="text-gray-500 text-center py-8 italic">No events on this day</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Exams Section */}
+                      {dayExams.length > 0 && (
+                        <div>
+                          <h4 className="font-bold text-red-700 mb-2 flex items-center gap-2">
+                            <span className="text-lg">📝</span> Exams ({dayExams.length})
+                          </h4>
+                          <div className="space-y-3">
+                            {dayExams.map((exam, idx) => (
+                              <div 
+                                key={idx}
+                                className="p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-xl"
+                              >
+                                <div className="font-bold text-red-800 text-lg">{exam.examName}</div>
+                                <div className="text-red-700 font-semibold mt-1">Subject: {exam.subject}</div>
+                                {exam.chapters && exam.chapters.length > 0 && (
+                                  <div className="mt-2">
+                                    <div className="text-sm text-red-600 font-semibold mb-1">Chapters:</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {exam.chapters.map((ch, chIdx) => (
+                                        <span 
+                                          key={chIdx}
+                                          className="text-xs px-2 py-1 bg-white border border-red-300 rounded-full text-red-700"
+                                        >
+                                          {ch.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {exam.keyPoints && (
+                                  <div className="mt-2 text-sm text-red-700 bg-white p-2 rounded border border-red-200">
+                                    <span className="font-semibold">Key Points:</span> {exam.keyPoints}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* One-Time Reminders Section */}
+                      {dayReminders.length > 0 && (
+                        <div>
+                          <h4 className="font-bold text-amber-700 mb-2 flex items-center gap-2">
+                            <span className="text-lg">🔔</span> Reminders ({dayReminders.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {dayReminders.map(reminder => (
+                              <div 
+                                key={reminder.id}
+                                className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-xl"
+                              >
+                                <div className="font-bold text-amber-800 text-lg">{reminder.title}</div>
+                                {reminder.description && (
+                                  <div className="mt-2 text-sm text-amber-700 whitespace-pre-wrap">
+                                    {reminder.description}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Recurring Reminders Section */}
+                      {dayRecurringReminders.length > 0 && (
+                        <div>
+                          <h4 className="font-bold text-blue-700 mb-2 flex items-center gap-2">
+                            <span className="text-lg">🔁</span> Recurring Reminders ({dayRecurringReminders.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {dayRecurringReminders.map(reminder => (
+                              <div 
+                                key={reminder.id}
+                                className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl"
+                              >
+                                <div className="font-bold text-blue-800 text-lg">{reminder.title}</div>
+                                <div className="text-blue-700 font-semibold mt-1">
+                                  🕐 {convertTo12Hour(reminder.time)} - {convertTo12Hour(reminder.end_time)}
+                                </div>
+                                {reminder.description && (
+                                  <div className="mt-2 text-sm text-blue-700 whitespace-pre-wrap">
+                                    {reminder.description}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 

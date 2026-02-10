@@ -124,6 +124,9 @@ const StudyTrackerApp = ({ session }) => {
   const [editingExam, setEditingExam] = useState(null);
   const [minimizedExams, setMinimizedExams] = useState({});
   const [expandedReminders, setExpandedReminders] = useState({});
+  const [viewingSubject, setViewingSubject] = useState(null);
+  const [profileSwitched, setProfileSwitched] = useState(false);
+  const [switchedProfileName, setSwitchedProfileName] = useState('');
   const [notificationsMinimized, setNotificationsMinimized] = useState(false);
   const [todayNotificationsMinimized, setTodayNotificationsMinimized] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState([]);
@@ -173,6 +176,12 @@ const StudyTrackerApp = ({ session }) => {
     const load = async () => {
       if (activeProfile) {
         _setLoading(true);
+        // Clear state first to prevent showing old data
+        setSubjects([]);
+        setTasks([]);
+        setExams([]);
+        setViewingSubject(null);
+        setMinimizedExams({});
         await loadProfileData(activeProfile.id);
         _setLoading(false);
       }
@@ -280,9 +289,22 @@ const StudyTrackerApp = ({ session }) => {
   };
 
   const switchProfile = (profile) => {
+    if (activeProfile?.id === profile.id) return; // Don't switch to same profile
+    
     _setLoading(true);
+    // Clear all data immediately to prevent showing old profile's data
+    setSubjects([]);
+    setTasks([]);
+    setExams([]);
+    setViewingSubject(null);
+    setMinimizedExams({});
     setActiveProfile(profile);
     setActiveView('daily');
+    
+    // Show profile switch indicator
+    setSwitchedProfileName(profile.name);
+    setProfileSwitched(true);
+    setTimeout(() => setProfileSwitched(false), 2500);
   };
 
   // Dismiss notification
@@ -1304,6 +1326,22 @@ const StudyTrackerApp = ({ session }) => {
           </div>
         ) : (
           <>
+            {/* Profile Switch Indicator */}
+            {profileSwitched && (
+              <div className="fixed top-24 right-6 z-50 animate-bounce">
+                <div className="bg-gradient-to-r from-green-400 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 border-2 border-white">
+                  <div className="bg-white/30 p-2 rounded-lg animate-pulse">
+                    <User className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium opacity-90">Switched to</div>
+                    <div className="text-lg font-bold">{switchedProfileName}</div>
+                  </div>
+                  <CheckCircle className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            )}
+
             {/* Profile Selection Bar */}
             <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
               <div className="flex items-center gap-3 overflow-x-auto">
@@ -1311,12 +1349,18 @@ const StudyTrackerApp = ({ session }) => {
                   <button
                     key={profile.id}
                     onClick={() => switchProfile(profile)}
-                    className={`flex-shrink-0 px-6 py-3 rounded-lg font-medium transition-all ${
+                    className={`relative flex-shrink-0 px-6 py-3 rounded-lg font-medium transition-all ${
                       activeProfile?.id === profile.id
-                        ? 'bg-indigo-400 text-white shadow-md'
+                        ? 'bg-gradient-to-r from-indigo-400 to-purple-400 text-white shadow-lg ring-2 ring-indigo-300 ring-offset-2'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
+                    {activeProfile?.id === profile.id && profileSwitched && (
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
+                      </span>
+                    )}
                     <div className="font-semibold">{profile.name}</div>
                     <div className="text-xs opacity-90">{profile.class}</div>
                   </button>
@@ -1965,15 +2009,15 @@ const StudyTrackerApp = ({ session }) => {
         )}
 
         {/* Navigation */}
-        <div className="bg-white rounded-lg shadow-lg mb-4 p-2 flex gap-2 overflow-x-auto">
+        <div className="bg-gradient-to-r from-indigo-100 via-purple-100 to-pink-100 rounded-xl shadow-xl mb-4 p-3 flex gap-2 overflow-x-auto border-2 border-indigo-200">
           {['daily', 'calendar', 'analytics', 'subjects', 'exams', 'docs'].map(view => (
             <button
               key={view}
               onClick={() => setActiveView(view)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${
+              className={`px-5 py-2.5 rounded-lg font-semibold transition-all whitespace-nowrap shadow-md ${
                 activeView === view
-                  ? 'bg-indigo-400 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg scale-105'
+                  : 'bg-white text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-lg'
               }`}
             >
               {view.charAt(0).toUpperCase() + view.slice(1)}
@@ -1981,7 +2025,7 @@ const StudyTrackerApp = ({ session }) => {
           ))}
           <button
             onClick={() => setShowSharedActivities(true)}
-            className="px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap bg-purple-100 text-purple-600 hover:bg-purple-200 flex items-center gap-2"
+            className="px-5 py-2.5 rounded-lg font-semibold transition-all whitespace-nowrap bg-gradient-to-r from-purple-400 to-pink-400 text-white hover:from-purple-500 hover:to-pink-500 flex items-center gap-2 shadow-md hover:shadow-lg"
           >
             <Target className="w-4 h-4" />
             Activities
@@ -1995,7 +2039,7 @@ const StudyTrackerApp = ({ session }) => {
             <div className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 rounded-2xl shadow-2xl p-8 text-white">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h1 className="text-3xl font-bold mb-2">Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}! 👋</h1>
+                  <h1 className="text-3xl font-bold mb-2">Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {activeProfile?.name}! 👋</h1>
                   <p className="text-white/90 text-lg">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
                 <div className="bg-white/20 backdrop-blur-lg rounded-xl p-4 text-center">
@@ -2919,11 +2963,11 @@ const StudyTrackerApp = ({ session }) => {
         {/* Subjects View */}
         {activeView === 'subjects' && (
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">Subjects & Chapters</h2>
               <button
                 onClick={() => setShowAddSubject(true)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                className="bg-indigo-400 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 flex items-center gap-2 shadow-md transition-all"
               >
                 <Plus className="w-4 h-4" />
                 Add Subject
@@ -3021,67 +3065,126 @@ const StudyTrackerApp = ({ session }) => {
               </div>
             )}
 
-            <div className="space-y-4">
+            {/* Pill Badge Display */}
+            <div className="flex flex-wrap gap-3">
               {subjects.map(subject => (
-                <div key={subject.id} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                      <Book className="w-5 h-5 text-indigo-600" />
-                      {subject.name}
-                    </h3>
-                    <button
-                      onClick={() => deleteSubject(subject.id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                <button
+                  key={subject.id}
+                  onClick={() => setViewingSubject(viewingSubject?.id === subject.id ? null : subject)}
+                  className={`group relative ${viewingSubject?.id === subject.id ? 'bg-gradient-to-r from-indigo-400 to-purple-400 text-white' : 'bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-gray-800'} px-4 py-2.5 rounded-full shadow-md hover:shadow-lg transition-all flex items-center gap-2`}
+                >
+                  <Book className={`w-4 h-4 ${viewingSubject?.id === subject.id ? 'text-white' : 'text-indigo-600'}`} />
+                  <span className="font-semibold text-sm">{subject.name}</span>
+                  <span className={`${viewingSubject?.id === subject.id ? 'bg-white/30 text-white' : 'bg-white/60 text-indigo-700'} text-xs font-bold px-2 py-0.5 rounded-full`}>
+                    {subject.chapters?.length || 0}
+                  </span>
+                </button>
+              ))}
+              {subjects.length === 0 && (
+                <p className="text-gray-500 text-sm italic py-4">No subjects yet. Click "Add Subject" to get started!</p>
+              )}
+            </div>
+
+            {/* Subject Detail Section (Inline) */}
+            {viewingSubject && (
+              <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl shadow-lg overflow-hidden border-2 border-indigo-200">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-indigo-400 to-purple-400 p-5 text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Book className="w-6 h-6" />
+                      <h3 className="text-xl font-bold">{viewingSubject.name}</h3>
+                      <span className="text-indigo-100 text-sm">
+                        {viewingSubject.chapters?.length || 0} chapter{viewingSubject.chapters?.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Delete subject "${viewingSubject.name}"?`)) {
+                            deleteSubject(viewingSubject.id);
+                            setViewingSubject(null);
+                          }
+                        }}
+                        className="bg-rose-400/80 hover:bg-rose-500 text-white p-2 rounded-lg transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setViewingSubject(null)}
+                        className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg transition-all"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  
-                  <div className="space-y-2">
-                    {subject.chapters?.map((chapter, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm text-gray-600 pl-4 py-1 bg-gray-50 rounded">
-                        <span>{chapter}</span>
+                </div>
+
+                {/* Content */}
+                <div className="p-5">
+                  <div className="space-y-2 mb-4">
+                    {viewingSubject.chapters?.map((chapter, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-white rounded-lg group hover:shadow-md transition-all">
+                        <div className="flex items-center gap-2">
+                          <div className="bg-indigo-400 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                            {i + 1}
+                          </div>
+                          <span className="text-gray-800 font-medium">{chapter}</span>
+                        </div>
                         <button
                           onClick={() => {
                             const updated = subjects.map(s => 
-                              s.id === subject.id 
+                              s.id === viewingSubject.id 
                                 ? { ...s, chapters: s.chapters.filter((_, idx) => idx !== i) }
                                 : s
                             );
                             setSubjects(updated);
                             saveData('subjects', updated);
+                            setViewingSubject({ ...viewingSubject, chapters: viewingSubject.chapters.filter((_, idx) => idx !== i) });
                           }}
-                          className="text-red-500 hover:text-red-700 mr-2"
+                          className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-500 transition-all"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     ))}
                     
-                    {editingChapter === subject.id ? (
-                      <div className="pl-4 flex gap-2">
+                    {(!viewingSubject.chapters || viewingSubject.chapters.length === 0) && (
+                      <p className="text-gray-500 text-center py-6 italic">No chapters added yet</p>
+                    )}
+                  </div>
+
+                  {/* Add Chapter Section */}
+                  {editingChapter === viewingSubject.id ? (
+                    <div className="p-4 bg-white rounded-lg">
+                      <div className="flex gap-2">
                         <input
                           type="text"
                           placeholder="Chapter name"
                           value={newChapterName}
                           onChange={(e) => setNewChapterName(e.target.value)}
                           onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                              addChapterToSubject(subject.id, newChapterName);
+                            if (e.key === 'Enter' && newChapterName.trim()) {
+                              addChapterToSubject(viewingSubject.id, newChapterName);
+                              setViewingSubject({ ...viewingSubject, chapters: [...(viewingSubject.chapters || []), newChapterName.trim()] });
                               setNewChapterName('');
                               setEditingChapter(null);
                             }
                           }}
-                          className="flex-1 p-2 border rounded text-sm"
+                          className="flex-1 p-2.5 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
                           autoFocus
                         />
                         <button
                           onClick={() => {
-                            addChapterToSubject(subject.id, newChapterName);
-                            setNewChapterName('');
-                            setEditingChapter(null);
+                            if (newChapterName.trim()) {
+                              addChapterToSubject(viewingSubject.id, newChapterName);
+                              setViewingSubject({ ...viewingSubject, chapters: [...(viewingSubject.chapters || []), newChapterName.trim()] });
+                              setNewChapterName('');
+                              setEditingChapter(null);
+                            }
                           }}
-                          className="px-3 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
+                          className="px-4 bg-indigo-400 text-white rounded-lg hover:bg-indigo-500 transition-all"
                         >
                           Add
                         </button>
@@ -3090,23 +3193,24 @@ const StudyTrackerApp = ({ session }) => {
                             setEditingChapter(null);
                             setNewChapterName('');
                           }}
-                          className="px-3 bg-gray-200 text-gray-600 rounded text-sm"
+                          className="px-4 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition-all"
                         >
                           Cancel
                         </button>
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => setEditingChapter(subject.id)}
-                        className="text-sm text-indigo-600 hover:text-indigo-700 pl-4"
-                      >
-                        + Add Chapter
-                      </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setEditingChapter(viewingSubject.id)}
+                      className="w-full py-2.5 bg-indigo-400 text-white rounded-lg hover:bg-indigo-500 flex items-center justify-center gap-2 transition-all"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Add Chapter
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 
@@ -10,6 +10,17 @@ const StudyTrackerApp = ({ session }) => {
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileClass, setNewProfileClass] = useState('');
   const [_loading, _setLoading] = useState(true);
+  
+  // Profile settings
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [accountName, setAccountName] = useState('');
+  const [editingAccountName, setEditingAccountName] = useState(false);
+  const [tempAccountName, setTempAccountName] = useState('');
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [profileTab, setProfileTab] = useState('kids'); // 'account' or 'kids'
+  const [editingProfile, setEditingProfile] = useState(null); // ID of profile being edited
+  const [editProfileData, setEditProfileData] = useState({ name: '', class: '' });
+  const [deletingProfileId, setDeletingProfileId] = useState(null);
   
   // Shared activities across all kids
   const [sharedActivities, setSharedActivities] = useState([]);
@@ -87,12 +98,42 @@ const StudyTrackerApp = ({ session }) => {
   const [showRecurringReminderForm, setShowRecurringReminderForm] = useState(false);
   const [editingRecurringReminder, setEditingRecurringReminder] = useState(null);
   const [recurringReminders, setRecurringReminders] = useState([]);
+  const [notificationsMinimized, setNotificationsMinimized] = useState(false);
+  const [todayNotificationsMinimized, setTodayNotificationsMinimized] = useState(false);
+  const [dismissedNotifications, setDismissedNotifications] = useState([]);
+
+  // Load account name from metadata or localStorage
+  useEffect(() => {
+    const loadAccountName = async () => {
+      try {
+        // Try to get from user metadata first
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.user_metadata?.account_name) {
+          setAccountName(user.user_metadata.account_name);
+        } else {
+          // Fallback to localStorage
+          const saved = localStorage.getItem('accountName');
+          if (saved) setAccountName(saved);
+        }
+      } catch (error) {
+        console.error('Error loading account name:', error);
+      }
+    };
+    loadAccountName();
+  }, []);
 
   // Load data from storage on mount
   useEffect(() => {
     const init = async () => {
       _setLoading(true);
       await Promise.all([loadProfiles(), loadSharedActivities()]);
+      
+      // Load dismissed notifications from localStorage
+      const dismissed = localStorage.getItem('dismissedNotifications');
+      if (dismissed) {
+        setDismissedNotifications(JSON.parse(dismissed));
+      }
+      
       _setLoading(false);
     };
     init();
@@ -197,6 +238,12 @@ const StudyTrackerApp = ({ session }) => {
   // Profile management
   const addProfile = async () => {
     if (newProfileName.trim()) {
+      // Check if max limit reached
+      if (profiles.length >= 5) {
+        alert('Maximum of 5 children profiles allowed');
+        return;
+      }
+      
       try {
         // Insert into Supabase - user_id will be automatically set by trigger
         const { data, error } = await supabase
@@ -228,31 +275,88 @@ const StudyTrackerApp = ({ session }) => {
     }
   };
 
-  const deleteProfile = async (profileId) => {
-    if (window.confirm('Are you sure you want to delete this profile? All data will be lost.')) {
+  // Account name management
+  const saveAccountName = async (name) => {
+    try {
+      // Save to user metadata
+      const { error } = await supabase.auth.updateUser({
+        data: { account_name: name }
+      });
+      
+      if (error) throw error;
+      
+      // Also save to localStorage as backup
+      localStorage.setItem('accountName', name);
+      setAccountName(name);
+      setEditingAccountName(false);
+    } catch (error) {
+      console.error('Error saving account name:', error);
+      alert('Failed to save account name: ' + error.message);
+    }
+  };
+
+  const updateProfile = async (profileId) => {
+    if (editProfileData.name.trim()) {
       try {
-        // Supabase will cascade delete related data due to ON DELETE CASCADE
         const { error } = await supabase
           .from('profiles')
-          .delete()
+          .update({
+            name: editProfileData.name.trim(),
+            class: editProfileData.class.trim()
+          })
           .eq('id', profileId);
         
         if (error) throw error;
         
-        // Update profiles list
-        const updatedProfiles = profiles.filter(p => p.id !== profileId);
+        // Update local state
+        const updatedProfiles = profiles.map(p => 
+          p.id === profileId 
+            ? { ...p, name: editProfileData.name.trim(), class: editProfileData.class.trim() }
+            : p
+        );
         setProfiles(updatedProfiles);
         
-        // Switch to first profile or null
-        if (updatedProfiles.length > 0) {
-          setActiveProfile(updatedProfiles[0]);
-        } else {
-          setActiveProfile(null);
+        // Update active profile if it's the one being edited
+        if (activeProfile?.id === profileId) {
+          setActiveProfile({ ...activeProfile, name: editProfileData.name.trim(), class: editProfileData.class.trim() });
         }
+        
+        setEditingProfile(null);
+        setEditProfileData({ name: '', class: '' });
       } catch (error) {
-        console.error('Error deleting profile:', error);
-        alert('Failed to delete profile: ' + error.message);
+        console.error('Error updating profile:', error);
+        alert('Failed to update profile: ' + error.message);
       }
+    }
+  };
+
+  const deleteProfile = async (profileId) => {
+    try {
+      // Supabase will cascade delete related data due to ON DELETE CASCADE
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', profileId);
+      
+      if (error) throw error;
+      
+      // Update profiles list
+      const updatedProfiles = profiles.filter(p => p.id !== profileId);
+      setProfiles(updatedProfiles);
+      
+      // Switch to first profile or null
+      if (updatedProfiles.length > 0) {
+        if (activeProfile?.id === profileId) {
+          setActiveProfile(updatedProfiles[0]);
+        }
+      } else {
+        setActiveProfile(null);
+      }
+      
+      setDeletingProfileId(null);
+    } catch (error) {
+      console.error('Error deleting profile:', error);
+      alert('Failed to delete profile: ' + error.message);
     }
   };
 
@@ -260,6 +364,20 @@ const StudyTrackerApp = ({ session }) => {
     _setLoading(true);
     setActiveProfile(profile);
     setActiveView('daily');
+  };
+
+  // Dismiss notification
+  const dismissNotification = (id, type) => {
+    const notificationId = `${type}-${id}`;
+    const newDismissed = [...dismissedNotifications, notificationId];
+    setDismissedNotifications(newDismissed);
+    localStorage.setItem('dismissedNotifications', JSON.stringify(newDismissed));
+  };
+
+  // Check if notification is dismissed
+  const isNotificationDismissed = (id, type) => {
+    const notificationId = `${type}-${id}`;
+    return dismissedNotifications.includes(notificationId);
   };
 
   // Shared activities management
@@ -1249,9 +1367,14 @@ const StudyTrackerApp = ({ session }) => {
         exam.subjects.forEach((subject, _subjectIndex) => {
         const daysLeft = getDaysUntil(subject.date);
         if (daysLeft <= 5 && daysLeft >= 0) {
-          const progress = getExamProgress(exam);
-          if (progress.pending > 0 || progress.started > 0) {
-            const pendingChapters = (subject.chapters || [])
+          // Calculate progress for this specific subject only
+          const subjectChapters = subject.chapters || [];
+          const pendingCount = subjectChapters.filter(c => c.status === 'pending').length;
+          const startedCount = subjectChapters.filter(c => c.status === 'started').length;
+          const remainingCount = pendingCount + startedCount;
+          
+          if (remainingCount > 0) {
+            const pendingChapters = subjectChapters
               .filter(c => c.status === 'pending' || c.status === 'started')
               .slice(0, 2);
             
@@ -1260,7 +1383,7 @@ const StudyTrackerApp = ({ session }) => {
               priority: 'high',
               subject: subject.subject,
               message: `${exam.name} - ${subject.subject} in ${daysLeft} days`,
-              details: `${progress.pending + progress.started} chapters remaining`,
+              details: `${remainingCount} chapter${remainingCount !== 1 ? 's' : ''} remaining`,
               chapters: pendingChapters.map(c => c.name),
               examId: exam.id
             });
@@ -1386,7 +1509,11 @@ const StudyTrackerApp = ({ session }) => {
                 ))}
                 
                 {/* Add Profile Button */}
-                {showAddProfile ? (
+                {profiles.length >= 5 ? (
+                  <div className="flex-shrink-0 px-6 py-3 border-2 border-gray-200 rounded-lg text-gray-400 bg-gray-50">
+                    <div className="text-xs text-center">Max 5 kids</div>
+                  </div>
+                ) : showAddProfile ? (
                   <div className="flex-shrink-0 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-3 min-w-[200px]">
                     <input
                       type="text"
@@ -1432,18 +1559,6 @@ const StudyTrackerApp = ({ session }) => {
                 )}
               </div>
               
-              {/* Delete Profile Option */}
-              {activeProfile && profiles.length > 1 && (
-                <div className="mt-3 pt-3 border-t flex items-center justify-between">
-                  <button
-                    onClick={() => deleteProfile(activeProfile.id)}
-                    className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Delete {activeProfile.name}'s Profile
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Header */}
@@ -1461,26 +1576,20 @@ const StudyTrackerApp = ({ session }) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
-                    <User className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm text-gray-700">{session?.user?.email}</span>
-                  </div>
                   <button
-                    onClick={() => setShowSharedActivities(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-md"
+                    onClick={() => setShowProfileModal(true)}
+                    className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 shadow-md transition-all"
+                    title="View Profile Settings"
                   >
-                    <Target className="w-5 h-5" />
-                    <span className="hidden sm:inline">Kids Activities</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      await supabase.auth.signOut();
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-md"
-                    title="Log Out"
-                  >
-                    <LogOut className="w-5 h-5" />
-                    <span className="hidden sm:inline">Log Out</span>
+                    <div className="bg-white/20 backdrop-blur-sm rounded-full p-1">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className="text-xs opacity-80">Account</span>
+                      <span className="font-semibold text-sm leading-tight">
+                        {accountName || session?.user?.email?.split('@')[0] || 'Profile'}
+                      </span>
+                    </div>
                   </button>
                 </div>
               </div>
@@ -1733,6 +1842,311 @@ const StudyTrackerApp = ({ session }) => {
             </div>
           </div>
         )}
+
+        {/* Profile Settings Modal */}
+        {showProfileModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-lg flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white/20 backdrop-blur-lg rounded-full p-3">
+                      <User className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold">Profile Settings</h2>
+                      <p className="text-sm text-white/80">Manage your account & kids</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowProfileModal(false);
+                      setEditingAccountName(false);
+                      setProfileTab('kids');
+                      setEditingProfile(null);
+                      setDeletingProfileId(null);
+                    }}
+                    className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-all"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={() => setProfileTab('kids')}
+                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
+                      profileTab === 'kids'
+                        ? 'bg-white text-indigo-600'
+                        : 'bg-white/20 text-white hover:bg-white/30'
+                    }`}
+                  >
+                    Kids Profiles
+                  </button>
+                  <button
+                    onClick={() => setProfileTab('account')}
+                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
+                      profileTab === 'account'
+                        ? 'bg-white text-indigo-600'
+                        : 'bg-white/20 text-white hover:bg-white/30'
+                    }`}
+                  >
+                    Account Settings
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-6">
+                {/* Kids Profiles Tab */}
+                {profileTab === 'kids' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-800">Manage Kids</h3>
+                      <span className="text-sm text-gray-600">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
+                    </div>
+
+                    {/* List of all kids */}
+                    {profiles.map((profile) => (
+                      <div 
+                        key={profile.id}
+                        className={`border rounded-lg p-4 transition-all ${
+                          activeProfile?.id === profile.id 
+                            ? 'border-indigo-300 bg-indigo-50' 
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                      >
+                        {editingProfile === profile.id ? (
+                          // Edit mode
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+                              <input
+                                type="text"
+                                value={editProfileData.name}
+                                onChange={(e) => setEditProfileData({ ...editProfileData, name: e.target.value })}
+                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="Child's name"
+                                autoFocus
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Grade/Class</label>
+                              <input
+                                type="text"
+                                value={editProfileData.class}
+                                onChange={(e) => setEditProfileData({ ...editProfileData, class: e.target.value })}
+                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="e.g., Grade 5"
+                              />
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                              <button
+                                onClick={() => updateProfile(profile.id)}
+                                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+                              >
+                                Save Changes
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingProfile(null);
+                                  setEditProfileData({ name: '', class: '' });
+                                }}
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : deletingProfileId === profile.id ? (
+                          // Delete confirmation mode
+                          <div className="space-y-3">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-semibold text-red-800">Delete {profile.name}'s Profile?</p>
+                                <p className="text-xs text-red-700 mt-1">
+                                  This will permanently delete all data including subjects, tasks, exams, and reminders. This action cannot be undone.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => deleteProfile(profile.id)}
+                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                              >
+                                Yes, Delete
+                              </button>
+                              <button
+                                onClick={() => setDeletingProfileId(null)}
+                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          // View mode
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-gray-800">{profile.name}</h4>
+                                {activeProfile?.id === profile.id && (
+                                  <span className="px-2 py-0.5 bg-indigo-600 text-white text-xs rounded-full">Active</span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 mt-0.5">
+                                {profile.class || 'Grade not set'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {activeProfile?.id !== profile.id && (
+                                <button
+                                  onClick={() => switchProfile(profile)}
+                                  className="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-medium"
+                                >
+                                  Switch
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setEditingProfile(profile.id);
+                                  setEditProfileData({ name: profile.name, class: profile.class || '' });
+                                }}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                                title="Edit profile"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              {profiles.length > 1 && (
+                                <button
+                                  onClick={() => setDeletingProfileId(profile.id)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                  title="Delete profile"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Add new profile hint */}
+                    <div className="mt-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border-2 border-dashed border-indigo-200">
+                      <p className="text-sm text-gray-700 text-center">
+                        💡 To add a new kid, use the "Add Child" button in the profiles section above (max 5 kids)
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Account Settings Tab */}
+                {profileTab === 'account' && (
+                  <div className="space-y-6">
+                    {/* Account Name Section */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-gray-700">Account Name</label>
+                      {editingAccountName ? (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={tempAccountName}
+                            onChange={(e) => setTempAccountName(e.target.value)}
+                            placeholder="Enter your name"
+                            className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => {
+                              if (tempAccountName.trim()) {
+                                saveAccountName(tempAccountName.trim());
+                              }
+                            }}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingAccountName(false);
+                              setTempAccountName('');
+                            }}
+                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <span className="text-gray-800 font-medium">
+                            {accountName || 'Not set'}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setEditingAccountName(true);
+                              setTempAccountName(accountName);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1 text-sm font-medium"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                            Edit
+                          </button>
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500">Your personal account name</p>
+                    </div>
+
+                    {/* Email Section */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-gray-700">Email Address</label>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <span className="text-gray-800">{session?.user?.email}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">Your login email address</p>
+                    </div>
+
+                    {/* Personalization Section (Placeholder) */}
+                    <div className="space-y-2 pt-4 border-t">
+                      <label className="block text-sm font-semibold text-gray-700">Personalization</label>
+                      <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-100">
+                        <p className="text-sm text-gray-600 text-center">
+                          🎨 Theme preferences, notifications, and more customization options coming soon!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="bg-gray-50 p-4 rounded-b-lg border-t flex gap-2 flex-shrink-0">
+                <button
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium shadow-sm"
+                >
+                  <LogOut className="w-5 h-5" />
+                  Sign Out
+                </button>
+                <button
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    setEditingAccountName(false);
+                    setProfileTab('kids');
+                    setEditingProfile(null);
+                    setDeletingProfileId(null);
+                  }}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
           </>
         )}
 
@@ -1751,6 +2165,13 @@ const StudyTrackerApp = ({ session }) => {
               {view.charAt(0).toUpperCase() + view.slice(1)}
             </button>
           ))}
+          <button
+            onClick={() => setShowSharedActivities(true)}
+            className="px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap bg-purple-100 text-purple-700 hover:bg-purple-200 flex items-center gap-2"
+          >
+            <Target className="w-4 h-4" />
+            Activities
+          </button>
         </div>
 
         {/* Daily View */}
@@ -1788,20 +2209,56 @@ const StudyTrackerApp = ({ session }) => {
 
             {/* Today's Notifications & Reminders */}
             {(getDailySuggestions().length > 0 || getTodaysReminders().length > 0 || getTodaysRecurringReminders().length > 0) && (
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg p-2">
-                    <AlertCircle className="w-6 h-6 text-white" />
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-300">
+                <div className="flex items-center justify-between p-6 bg-gradient-to-r from-orange-50 to-red-50 border-b border-orange-100">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg p-2">
+                      <AlertCircle className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800">Today's Notifications</h2>
+                      {todayNotificationsMinimized && (
+                        <p className="text-xs text-gray-600">
+                          {getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
+                           getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
+                           getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length} active
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <h2 className="text-2xl font-bold text-gray-800">Today's Notifications</h2>
-                  <span className="ml-auto bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-bold">
-                    {getDailySuggestions().length + getTodaysReminders().length + getTodaysRecurringReminders().length}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {!todayNotificationsMinimized && (
+                      <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-bold">
+                        {getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
+                         getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
+                         getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setTodayNotificationsMinimized(!todayNotificationsMinimized)}
+                      className="p-2 bg-white hover:bg-orange-100 rounded-lg transition-all border border-orange-200 shadow-sm hover:shadow-md"
+                      title={todayNotificationsMinimized ? 'Expand notifications' : 'Minimize notifications'}
+                    >
+                      {todayNotificationsMinimized ? <ChevronDown className="w-5 h-5 text-orange-700" /> : <ChevronUp className="w-5 h-5 text-orange-700" />}
+                    </button>
+                  </div>
                 </div>
+                
+                <div 
+                  className="transition-all duration-500 ease-in-out"
+                  style={{ 
+                    maxHeight: todayNotificationsMinimized ? '0' : '2000px',
+                    opacity: todayNotificationsMinimized ? '0' : '1',
+                    overflow: todayNotificationsMinimized ? 'hidden' : 'visible'
+                  }}
+                >
+                  <div className="p-6">
                 
                 <div className="space-y-3">
                   {/* Today's Reminders */}
-                  {getTodaysReminders().map((reminder) => (
+                  {getTodaysReminders()
+                    .filter(reminder => !isNotificationDismissed(reminder.id, 'reminder'))
+                    .map((reminder) => (
                     <div key={reminder.id} className="flex items-start gap-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-orange-400 rounded-lg hover:shadow-md transition-all">
                       <div className="bg-orange-100 rounded-full p-2 flex-shrink-0">
                         <Clock className="w-5 h-5 text-orange-600" />
@@ -1815,25 +2272,20 @@ const StudyTrackerApp = ({ session }) => {
                           <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
                         )}
                       </div>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button
-                          onClick={(e) => {e.stopPropagation(); startEditReminder(reminder);}}
-                          className="text-blue-500 hover:text-blue-700 p-1"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {e.stopPropagation(); deleteReminder(reminder.id);}}
-                          className="text-red-500 hover:text-red-700 p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'reminder');}}
+                        className="text-gray-500 hover:text-gray-700 p-2 flex-shrink-0 hover:bg-gray-100 rounded-lg transition-all"
+                        title="Dismiss"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
 
                   {/* Today's Recurring Reminders */}
-                  {getTodaysRecurringReminders().map((reminder) => (
+                  {getTodaysRecurringReminders()
+                    .filter(reminder => !isNotificationDismissed(reminder.id, 'recurring'))
+                    .map((reminder) => (
                     <div key={reminder.id} className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-indigo-400 rounded-lg hover:shadow-md transition-all">
                       <div className="bg-indigo-100 rounded-full p-2 flex-shrink-0">
                         <Clock className="w-5 h-5 text-indigo-600" />
@@ -1851,25 +2303,20 @@ const StudyTrackerApp = ({ session }) => {
                           <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
                         )}
                       </div>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button
-                          onClick={(e) => {e.stopPropagation(); startEditRecurringReminder(reminder);}}
-                          className="text-blue-500 hover:text-blue-700 p-1"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {e.stopPropagation(); deleteRecurringReminder(reminder.id);}}
-                          className="text-red-500 hover:text-red-700 p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'recurring');}}
+                        className="text-gray-500 hover:text-gray-700 p-2 flex-shrink-0 hover:bg-gray-100 rounded-lg transition-all"
+                        title="Dismiss"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
 
                   {/* Study Suggestions */}
-                  {getDailySuggestions().map((suggestion, i) => (
+                  {getDailySuggestions()
+                    .filter((suggestion, i) => !isNotificationDismissed(i, 'suggestion'))
+                    .map((suggestion, i) => (
                     <div 
                       key={i} 
                       className={`flex items-start gap-3 p-4 rounded-lg border-l-4 hover:shadow-md transition-all ${
@@ -1905,8 +2352,17 @@ const StudyTrackerApp = ({ session }) => {
                           </div>
                         )}
                       </div>
+                      <button
+                        onClick={() => dismissNotification(i, 'suggestion')}
+                        className="text-gray-500 hover:text-gray-700 p-1 flex-shrink-0"
+                        title="Dismiss"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
+                </div>
+                </div>
                 </div>
               </div>
             )}
@@ -2108,34 +2564,61 @@ const StudyTrackerApp = ({ session }) => {
               </div>
 
               {/* School Reminders Management */}
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2">
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-300">
+                <div className="flex items-center justify-between p-6 bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-amber-100">
+                  <div className="flex items-center gap-3">
                     <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-lg p-2">
                       <Bell className="w-6 h-6 text-white" />
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-800">Reminders</h2>
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800">Reminders</h2>
+                      {notificationsMinimized && (
+                        <p className="text-xs text-gray-600">
+                          {getUpcomingReminders().length} upcoming • {recurringReminders.length} recurring
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2">
+                    {!notificationsMinimized && (
+                      <>
+                        <button
+                          onClick={() => setShowRecurringReminderForm(!showRecurringReminderForm)}
+                          className="text-xs px-3 py-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-all"
+                          title="Recurring (e.g., Tuition every Mon/Wed/Thu)"
+                        >
+                          ↻ Recurring
+                        </button>
+                        <button
+                          onClick={() => {
+                            const todayDate = getTodayDateIST();
+                            setNewReminder({ title: '', date: todayDate, description: '' });
+                            setShowAddReminder(true);
+                          }}
+                          className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      </>
+                    )}
                     <button
-                      onClick={() => setShowRecurringReminderForm(!showRecurringReminderForm)}
-                      className="text-xs px-3 py-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-all"
-                      title="Recurring (e.g., Tuition every Mon/Wed/Thu)"
+                      onClick={() => setNotificationsMinimized(!notificationsMinimized)}
+                      className="p-2 bg-white hover:bg-amber-100 rounded-lg transition-all border border-amber-200 shadow-sm hover:shadow-md"
+                      title={notificationsMinimized ? 'Expand notifications' : 'Minimize notifications'}
                     >
-                      ↻ Recurring
-                    </button>
-                    <button
-                      onClick={() => {
-                        const todayDate = getTodayDateIST();
-                        setNewReminder({ title: '', date: todayDate, description: '' });
-                        setShowAddReminder(true);
-                      }}
-                      className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
-                    >
-                      <Plus className="w-5 h-5" />
+                      {notificationsMinimized ? <ChevronDown className="w-5 h-5 text-amber-700" /> : <ChevronUp className="w-5 h-5 text-amber-700" />}
                     </button>
                   </div>
                 </div>
+                
+                <div 
+                  className="transition-all duration-500 ease-in-out overflow-hidden"
+                  style={{ 
+                    maxHeight: notificationsMinimized ? '0' : '3000px',
+                    opacity: notificationsMinimized ? '0' : '1'
+                  }}
+                >
+                  <div className="p-6">
                 
                 {showAddReminder && (
                   <div className="mb-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200 space-y-3">
@@ -2429,7 +2912,9 @@ const StudyTrackerApp = ({ session }) => {
                 </div>
               </div>
             )}
-          </div>
+                  </div>
+                </div>
+              </div>
         )}
 
         {/* Subjects View */}

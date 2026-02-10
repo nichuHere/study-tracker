@@ -2,24 +2,71 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
+import { useProfiles, useReminders } from '../hooks';
+import { getTodayDateIST, getISTNow, convertTo12Hour, getDaysUntil } from '../utils/helpers';
 
 const StudyTrackerApp = ({ session }) => {
-  const [profiles, setProfiles] = useState([]);
-  const [activeProfile, setActiveProfile] = useState(null);
-  const [showAddProfile, setShowAddProfile] = useState(false);
-  const [newProfileName, setNewProfileName] = useState('');
-  const [newProfileClass, setNewProfileClass] = useState('');
+  // Use custom hooks for profile and reminder management
+  const {
+    profiles,
+    activeProfile,
+    setActiveProfile,
+    showAddProfile,
+    setShowAddProfile,
+    newProfileName,
+    setNewProfileName,
+    newProfileClass,
+    setNewProfileClass,
+    showProfileModal,
+    setShowProfileModal,
+    accountName,
+    editingAccountName,
+    setEditingAccountName,
+    tempAccountName,
+    setTempAccountName,
+    profileTab,
+    setProfileTab,
+    editingProfile,
+    setEditingProfile,
+    editProfileData,
+    setEditProfileData,
+    deletingProfileId,
+    setDeletingProfileId,
+    addProfile,
+    updateProfile,
+    deleteProfile,
+    saveAccountName,
+    startEditProfile: _startEditProfile,
+    cancelEditProfile: _cancelEditProfile
+  } = useProfiles(session);
+
   const [_loading, _setLoading] = useState(true);
   
-  // Profile settings
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [accountName, setAccountName] = useState('');
-  const [editingAccountName, setEditingAccountName] = useState(false);
-  const [tempAccountName, setTempAccountName] = useState('');
-  const [profileTab, setProfileTab] = useState('kids'); // 'account' or 'kids'
-  const [editingProfile, setEditingProfile] = useState(null); // ID of profile being edited
-  const [editProfileData, setEditProfileData] = useState({ name: '', class: '' });
-  const [deletingProfileId, setDeletingProfileId] = useState(null);
+  // Use custom hooks for reminder management
+  const {
+    reminders,
+    recurringReminders,
+    newReminder,
+    setNewReminder,
+    newRecurringReminder,
+    setNewRecurringReminder,
+    reminderType,
+    setReminderType,
+    editingReminder,
+    setEditingReminder,
+    editReminderData,
+    setEditReminderData,
+    editingRecurringReminder,
+    setEditingRecurringReminder,
+    addReminder,
+    addRecurringReminder,
+    updateReminder,
+    deleteReminder,
+    updateRecurringReminder,
+    deleteRecurringReminder,
+    startEditReminder,
+    startEditRecurringReminder
+  } = useReminders(activeProfile);
   
   // Shared activities across all kids
   const [sharedActivities, setSharedActivities] = useState([]);
@@ -29,7 +76,6 @@ const StudyTrackerApp = ({ session }) => {
   const [subjects, setSubjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [exams, setExams] = useState([]);
-  const [reminders, setReminders] = useState([]);
   const [standardActivities, setStandardActivities] = useState([
     'Read chapter',
     'Practice problems',
@@ -77,24 +123,7 @@ const StudyTrackerApp = ({ session }) => {
   const [examChapterInput, setExamChapterInput] = useState('');
   const [editingExam, setEditingExam] = useState(null);
   const [minimizedExams, setMinimizedExams] = useState({});
-  const [newReminder, setNewReminder] = useState({
-    title: '',
-    date: '',
-    description: ''
-  });
   const [expandedReminders, setExpandedReminders] = useState({});
-  const [editingReminder, setEditingReminder] = useState(null);
-  const [editReminderData, setEditReminderData] = useState({ title: '', date: '', description: '' });
-  const [newRecurringReminder, setNewRecurringReminder] = useState({
-    title: '',
-    description: '',
-    time: '19:15',
-    end_time: '20:00',
-    days: [] // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
-  });
-  const [reminderType, setReminderType] = useState('one-time'); // 'one-time' or 'recurring'
-  const [editingRecurringReminder, setEditingRecurringReminder] = useState(null);
-  const [recurringReminders, setRecurringReminders] = useState([]);
   const [notificationsMinimized, setNotificationsMinimized] = useState(false);
   const [todayNotificationsMinimized, setTodayNotificationsMinimized] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState([]);
@@ -105,31 +134,11 @@ const StudyTrackerApp = ({ session }) => {
   });
   const [selectedDate, setSelectedDate] = useState(null);
 
-  // Load account name from metadata or localStorage
-  useEffect(() => {
-    const loadAccountName = async () => {
-      try {
-        // Try to get from user metadata first
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.user_metadata?.account_name) {
-          setAccountName(user.user_metadata.account_name);
-        } else {
-          // Fallback to localStorage
-          const saved = localStorage.getItem('accountName');
-          if (saved) setAccountName(saved);
-        }
-      } catch (error) {
-        console.error('Error loading account name:', error);
-      }
-    };
-    loadAccountName();
-  }, []);
-
   // Load data from storage on mount
   useEffect(() => {
     const init = async () => {
       _setLoading(true);
-      await Promise.all([loadProfiles(), loadSharedActivities()]);
+      await loadSharedActivities();
       
       // Load dismissed notifications from localStorage
       const dismissed = localStorage.getItem('dismissedNotifications');
@@ -171,23 +180,6 @@ const StudyTrackerApp = ({ session }) => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfile]);
-
-  const loadProfiles = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', session?.user?.id) // Only load profiles for current user
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      if (data && data.length > 0) {
-        setProfiles(data);
-        setActiveProfile(data[0]);
-      }
-    } catch (error) {
-      console.error('Error loading profiles:', error);
-    }
-  };
 
   // Process task rollover - move incomplete tasks from previous days to today
   const processTaskRollover = async (tasks, _profileId) => {
@@ -239,14 +231,12 @@ const StudyTrackerApp = ({ session }) => {
 
   const loadProfileData = async (profileId) => {
     try {
-      // Load data from Supabase
-      const [subjectsResult, tasksResult, examsResult, remindersResult, standardResult, recurringRemindersResult] = await Promise.all([
+      // Load data from Supabase (reminders loaded by useReminders hook)
+      const [subjectsResult, tasksResult, examsResult, standardResult] = await Promise.all([
         supabase.from('subjects').select('*').eq('profile_id', profileId),
         supabase.from('tasks').select('*').eq('profile_id', profileId),
         supabase.from('exams').select('*').eq('profile_id', profileId),
-        supabase.from('reminders').select('*').eq('profile_id', profileId),
-        supabase.from('standard_activities').select('*').eq('profile_id', profileId),
-        supabase.from('recurring_reminders').select('*').eq('profile_id', profileId)
+        supabase.from('standard_activities').select('*').eq('profile_id', profileId)
       ]);
 
       setSubjects(subjectsResult.data || []);
@@ -265,8 +255,6 @@ const StudyTrackerApp = ({ session }) => {
         minimizedState[exam.id] = true;
       });
       setMinimizedExams(minimizedState);
-      setReminders(remindersResult.data || []);
-      setRecurringReminders(recurringRemindersResult.data || []);
       
       if (standardResult.data && standardResult.data.length > 0) {
         setStandardActivities(standardResult.data.map(item => item.activity));
@@ -278,7 +266,6 @@ const StudyTrackerApp = ({ session }) => {
       setSubjects([]);
       setTasks([]);
       setExams([]);
-      setReminders([]);
       setStandardActivities(['Read chapter', 'Practice problems', 'Review notes', 'Watch video', 'Take quiz']);
     }
   };
@@ -289,131 +276,6 @@ const StudyTrackerApp = ({ session }) => {
       await window.storage.set(`${key}_${activeProfile.id}`, JSON.stringify(data));
     } catch (error) {
       console.error('Error saving:', error);
-    }
-  };
-
-  // Profile management
-  const addProfile = async () => {
-    if (newProfileName.trim()) {
-      // Check if max limit reached
-      if (profiles.length >= 5) {
-        alert('Maximum of 5 children profiles allowed');
-        return;
-      }
-      
-      try {
-        // Insert into Supabase - user_id will be automatically set by trigger
-        const { data, error } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              name: newProfileName.trim(),
-              class: newProfileClass.trim(),
-              user_id: session?.user?.id // Explicitly set user_id from session
-            }
-          ])
-          .select();
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          const newProfile = data[0];
-          setProfiles([...profiles, newProfile]);
-          setActiveProfile(newProfile);
-        }
-        
-        setNewProfileName('');
-        setNewProfileClass('');
-        setShowAddProfile(false);
-      } catch (error) {
-        console.error('Error adding profile:', error);
-        alert('Failed to create profile: ' + error.message);
-      }
-    }
-  };
-
-  // Account name management
-  const saveAccountName = async (name) => {
-    try {
-      // Save to user metadata
-      const { error } = await supabase.auth.updateUser({
-        data: { account_name: name }
-      });
-      
-      if (error) throw error;
-      
-      // Also save to localStorage as backup
-      localStorage.setItem('accountName', name);
-      setAccountName(name);
-      setEditingAccountName(false);
-    } catch (error) {
-      console.error('Error saving account name:', error);
-      alert('Failed to save account name: ' + error.message);
-    }
-  };
-
-  const updateProfile = async (profileId) => {
-    if (editProfileData.name.trim()) {
-      try {
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            name: editProfileData.name.trim(),
-            class: editProfileData.class.trim()
-          })
-          .eq('id', profileId);
-        
-        if (error) throw error;
-        
-        // Update local state
-        const updatedProfiles = profiles.map(p => 
-          p.id === profileId 
-            ? { ...p, name: editProfileData.name.trim(), class: editProfileData.class.trim() }
-            : p
-        );
-        setProfiles(updatedProfiles);
-        
-        // Update active profile if it's the one being edited
-        if (activeProfile?.id === profileId) {
-          setActiveProfile({ ...activeProfile, name: editProfileData.name.trim(), class: editProfileData.class.trim() });
-        }
-        
-        setEditingProfile(null);
-        setEditProfileData({ name: '', class: '' });
-      } catch (error) {
-        console.error('Error updating profile:', error);
-        alert('Failed to update profile: ' + error.message);
-      }
-    }
-  };
-
-  const deleteProfile = async (profileId) => {
-    try {
-      // Supabase will cascade delete related data due to ON DELETE CASCADE
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', profileId);
-      
-      if (error) throw error;
-      
-      // Update profiles list
-      const updatedProfiles = profiles.filter(p => p.id !== profileId);
-      setProfiles(updatedProfiles);
-      
-      // Switch to first profile or null
-      if (updatedProfiles.length > 0) {
-        if (activeProfile?.id === profileId) {
-          setActiveProfile(updatedProfiles[0]);
-        }
-      } else {
-        setActiveProfile(null);
-      }
-      
-      setDeletingProfileId(null);
-    } catch (error) {
-      console.error('Error deleting profile:', error);
-      alert('Failed to delete profile: ' + error.message);
     }
   };
 
@@ -938,146 +800,9 @@ const StudyTrackerApp = ({ session }) => {
     return { pending, started, completed, percentage, totalChapters };
   };
 
-  // Reminder management
-  const addReminder = async () => {
-    if (newReminder.title && newReminder.date && activeProfile) {
-      try {
-        const { data, error } = await supabase
-          .from('reminders')
-          .insert([{
-            profile_id: activeProfile.id,
-            title: newReminder.title,
-            date: newReminder.date,
-            description: newReminder.description || null
-          }])
-          .select();
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          setReminders([...reminders, data[0]]);
-        }
-        
-        setNewReminder({ title: '', date: '', description: '' });
-        setShowAddReminder(false);
-      } catch (error) {
-        console.error('Error adding reminder:', error);
-        alert('Failed to add reminder: ' + error.message);
-      }
-    }
-  };
-
-  const deleteReminder = async (id) => {
-    try {
-      const { error } = await supabase
-        .from('reminders')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      const updated = reminders.filter(r => r.id !== id);
-      setReminders(updated);
-    } catch (error) {
-      console.error('Error deleting reminder:', error);
-    }
-  };
-
-  const startEditReminder = (reminder) => {
-    setEditingReminder(reminder.id);
-    setEditReminderData({
-      title: reminder.title,
-      date: reminder.date,
-      description: reminder.description
-    });
-  };
-
-  const saveEditReminder = async () => {
-    if (!editReminderData.title.trim() || !editReminderData.date) {
-      alert('Title and date are required');
-      return;
-    }
-
-    try {
-      await supabase
-        .from('reminders')
-        .update({
-          title: editReminderData.title,
-          date: editReminderData.date,
-          description: editReminderData.description
-        })
-        .eq('id', editingReminder);
-
-      const updatedReminders = reminders.map(r =>
-        r.id === editingReminder
-          ? { ...r, ...editReminderData }
-          : r
-      );
-      setReminders(updatedReminders);
-      setEditingReminder(null);
-    } catch (error) {
-      console.error('Error updating reminder:', error);
-      alert('Failed to update reminder');
-    }
-  };
-
-  // Get current date/time in IST (India Standard Time, UTC+5:30)
-  const getISTNow = () => {
-    const now = new Date();
-    const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    return istTime;
-  };
-
-  // Get today's day of week in IST (0=Sun, 1=Mon, ..., 6=Sat)
+  // Get current day of week in IST (0=Sun, 1=Mon, ..., 6=Sat)
   const getTodayDayOfWeekIST = () => {
     return getISTNow().getDay();
-  };
-
-  // Get today's date in IST
-  const getTodayDateIST = () => {
-    const istDate = getISTNow();
-    return istDate.toISOString().split('T')[0];
-  };
-
-  // Convert 24-hour time format (HH:MM) to 12-hour AM/PM format
-  const convertTo12Hour = (time24) => {
-    if (!time24) return '';
-    const [hours, minutes] = time24.split(':');
-    let hours12 = parseInt(hours);
-    const ampm = hours12 >= 12 ? 'PM' : 'AM';
-    hours12 = hours12 % 12 || 12;
-    return `${hours12}:${minutes} ${ampm}`;
-  };
-
-  // Add recurring reminder
-  const addRecurringReminder = async () => {
-    if (newRecurringReminder.title && newRecurringReminder.days.length > 0 && activeProfile) {
-      try {
-        const { data, error } = await supabase
-          .from('recurring_reminders')
-          .insert([{
-            profile_id: activeProfile.id,
-            title: newRecurringReminder.title,
-            description: newRecurringReminder.description || null,
-            time: newRecurringReminder.time,
-            end_time: newRecurringReminder.end_time,
-            days: newRecurringReminder.days // Array of day numbers
-          }])
-          .select();
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          setRecurringReminders([...recurringReminders, data[0]]);
-        }
-        
-        setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
-        setShowAddReminder(false);
-      } catch (error) {
-        console.error('Error adding recurring reminder:', error);
-        alert('Failed to add recurring reminder: ' + error.message);
-      }
-    }
   };
 
   // Get reminders for today (both one-time and recurring)
@@ -1096,77 +821,6 @@ const StudyTrackerApp = ({ session }) => {
       .map(r => ({ ...r, isRecurring: true, isToday: true }));
     
     return [...oneTimeReminders, ...todayRecurringReminders];
-  };
-
-  // Delete recurring reminder
-  const deleteRecurringReminder = async (id) => {
-    try {
-      const { error } = await supabase
-        .from('recurring_reminders')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      const updated = recurringReminders.filter(r => r.id !== id);
-      setRecurringReminders(updated);
-    } catch (error) {
-      console.error('Error deleting recurring reminder:', error);
-    }
-  };
-
-  const startEditRecurringReminder = (reminder) => {
-    setEditingRecurringReminder(reminder.id);
-    setNewRecurringReminder({
-      title: reminder.title,
-      description: reminder.description,
-      time: reminder.time,
-      end_time: reminder.end_time || '20:00',
-      days: reminder.days
-    });
-    setReminderType('recurring');
-    setShowAddReminder(false); // Close the add form if open
-  };
-
-  const saveEditRecurringReminder = async () => {
-    if (!newRecurringReminder.title.trim() || newRecurringReminder.days.length === 0) {
-      alert('Title and at least one day are required');
-      return;
-    }
-
-    try {
-      await supabase
-        .from('recurring_reminders')
-        .update({
-          title: newRecurringReminder.title,
-          description: newRecurringReminder.description,
-          time: newRecurringReminder.time,
-          end_time: newRecurringReminder.end_time,
-          days: newRecurringReminder.days
-        })
-        .eq('id', editingRecurringReminder);
-
-      const updatedReminders = recurringReminders.map(r =>
-        r.id === editingRecurringReminder
-          ? { ...r, ...newRecurringReminder }
-          : r
-      );
-      setRecurringReminders(updatedReminders);
-      setEditingRecurringReminder(null);
-      setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
-    } catch (error) {
-      console.error('Error updating recurring reminder:', error);
-      alert('Failed to update recurring reminder');
-    }
-  };
-
-    // Calculate days until exam
-  const getDaysUntil = (dateString) => {
-    const today = new Date();
-    const examDate = new Date(dateString);
-    const diffTime = examDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
   };
 
   // Format date with day name
@@ -2947,7 +2601,7 @@ const StudyTrackerApp = ({ session }) => {
                     />
                     <div className="flex gap-2">
                       <button
-                        onClick={saveEditReminder}
+                        onClick={updateReminder}
                         className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-cyan-700 font-semibold shadow-lg transition-all"
                       >
                         Save
@@ -3238,7 +2892,7 @@ const StudyTrackerApp = ({ session }) => {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={saveEditRecurringReminder}
+                      onClick={updateRecurringReminder}
                       className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 font-bold shadow-lg transition-all"
                     >
                       💾 Save Changes

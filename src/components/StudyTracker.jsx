@@ -16,7 +16,6 @@ const StudyTrackerApp = ({ session }) => {
   const [accountName, setAccountName] = useState('');
   const [editingAccountName, setEditingAccountName] = useState(false);
   const [tempAccountName, setTempAccountName] = useState('');
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [profileTab, setProfileTab] = useState('kids'); // 'account' or 'kids'
   const [editingProfile, setEditingProfile] = useState(null); // ID of profile being edited
   const [editProfileData, setEditProfileData] = useState({ name: '', class: '' });
@@ -166,6 +165,7 @@ const StudyTrackerApp = ({ session }) => {
       }
     };
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfile]);
 
   const loadProfiles = async () => {
@@ -185,6 +185,54 @@ const StudyTrackerApp = ({ session }) => {
     }
   };
 
+  // Process task rollover - move incomplete tasks from previous days to today
+  const processTaskRollover = async (tasks, _profileId) => {
+    const today = getTodayDateIST();
+    const incompletePastTasks = tasks.filter(task => 
+      task.date < today && !task.completed
+    );
+
+    if (incompletePastTasks.length === 0) {
+      return tasks;
+    }
+
+    // Update each incomplete past task
+    const rolloverUpdates = incompletePastTasks.map(async (task) => {
+      const carryoverDays = (task.carryover_days || 0) + 1;
+      
+      try {
+        const { error } = await supabase
+          .from('tasks')
+          .update({ 
+            date: today,
+            carryover_days: carryoverDays 
+          })
+          .eq('id', task.id);
+        
+        if (error) throw error;
+        
+        return {
+          ...task,
+          date: today,
+          carryover_days: carryoverDays
+        };
+      } catch (error) {
+        console.error('Error rolling over task:', error);
+        return task;
+      }
+    });
+
+    const updatedTasks = await Promise.all(rolloverUpdates);
+    
+    // Merge updated tasks with original tasks
+    const taskMap = new Map(tasks.map(t => [t.id, t]));
+    updatedTasks.forEach(ut => {
+      taskMap.set(ut.id, ut);
+    });
+    
+    return Array.from(taskMap.values());
+  };
+
   const loadProfileData = async (profileId) => {
     try {
       // Load data from Supabase
@@ -198,7 +246,12 @@ const StudyTrackerApp = ({ session }) => {
       ]);
 
       setSubjects(subjectsResult.data || []);
-      setTasks(tasksResult.data || []);
+      
+      // Process task rollover for incomplete tasks from previous days
+      const tasksData = tasksResult.data || [];
+      const updatedTasks = await processTaskRollover(tasksData, profileId);
+      setTasks(updatedTasks);
+      
       const examsData = examsResult.data || [];
       console.log('📚 Loading exams from database:', examsData);
       setExams(examsData);
@@ -585,7 +638,8 @@ const StudyTrackerApp = ({ session }) => {
             duration: newTask.duration,
             date: newTask.date,
             completed: newTask.completed,
-            instructions: newTask.instructions || null
+            instructions: newTask.instructions || null,
+            carryover_days: 0
           }])
           .select();
         
@@ -2542,6 +2596,13 @@ const StudyTrackerApp = ({ session }) => {
                           </div>
                           {task.chapter && (
                             <div className="text-sm text-indigo-600 font-medium">{task.chapter}</div>
+                          )}
+                          {task.carryover_days > 0 && (
+                            <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-gradient-to-r from-orange-100 to-red-100 border border-orange-300 rounded-full">
+                              <span className="text-xs font-semibold text-orange-700">
+                                Carried over {task.carryover_days} {task.carryover_days === 1 ? 'day' : 'days'}
+                              </span>
+                            </div>
                           )}
                           {task.instructions && (
                             <div className="text-sm text-gray-600 mt-1 italic">{task.instructions}</div>

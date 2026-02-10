@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     date DATE NOT NULL,
     completed BOOLEAN DEFAULT FALSE,
     instructions TEXT,
+    carryover_days INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

@@ -100,7 +100,7 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-200 via-purple-200 to-pink-200 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-white opacity-10 rounded-full blur-3xl animate-pulse"></div>
@@ -112,9 +112,12 @@ const Auth = () => {
         {/* Left side - Branding and Features */}
         <div className="hidden md:block text-white space-y-8 animate-slide-in-left">
           <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-white/30 backdrop-blur-lg p-4 rounded-3xl shadow-2xl border-2 border-white/40 animate-float">
-                <img src={BoyLogo} alt="Kannama Logo" className="w-24 h-24 object-contain drop-shadow-2xl" />
+            <div className="flex items-center gap-6">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-white/10 rounded-full blur-2xl"></div>
+                <div className="relative bg-gradient-to-br from-white/20 via-white/10 to-transparent backdrop-blur-sm p-2 rounded-full shadow-2xl border border-white/30 animate-float">
+                  <img src={BoyLogo} alt="Kannama Logo" className="w-48 h-48 object-contain drop-shadow-2xl filter brightness-110" />
+                </div>
               </div>
               <div>
                 <h1 className="text-5xl font-bold drop-shadow-lg">Kannama</h1>
@@ -129,7 +132,7 @@ const Auth = () => {
           {/* Feature highlights */}
           <div className="space-y-4">
             <div className="flex items-start gap-4 bg-white/10 backdrop-blur-lg p-4 rounded-xl hover:bg-white/20 transition-all transform hover:scale-105">
-              <div className="bg-indigo-400/50 p-2 rounded-lg">
+              <div className="bg-indigo-300/60 p-2 rounded-lg">
                 <Book className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -139,7 +142,7 @@ const Auth = () => {
             </div>
 
             <div className="flex items-start gap-4 bg-white/10 backdrop-blur-lg p-4 rounded-xl hover:bg-white/20 transition-all transform hover:scale-105">
-              <div className="bg-purple-400/50 p-2 rounded-lg">
+              <div className="bg-purple-300/60 p-2 rounded-lg">
                 <Target className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -149,7 +152,7 @@ const Auth = () => {
             </div>
 
             <div className="flex items-start gap-4 bg-white/10 backdrop-blur-lg p-4 rounded-xl hover:bg-white/20 transition-all transform hover:scale-105">
-              <div className="bg-pink-400/50 p-2 rounded-lg">
+              <div className="bg-pink-300/60 p-2 rounded-lg">
                 <TrendingUp className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -171,12 +174,15 @@ const Auth = () => {
           <div className="bg-white/95 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-2xl border border-white/20 transform hover:shadow-3xl transition-all duration-300">
             {/* Mobile branding */}
             <div className="md:hidden mb-6 text-center">
-              <div className="flex items-center justify-center gap-3 mb-3">
-                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-2xl shadow-lg">
-                  <img src={BoyLogo} alt="Kannama Logo" className="w-16 h-16 object-contain drop-shadow-lg" />
+              <div className="flex items-center justify-center gap-4 mb-3">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-200 to-purple-200 rounded-2xl blur-lg"></div>
+                  <div className="relative bg-gradient-to-br from-indigo-300 via-purple-300 to-pink-300 p-2 rounded-2xl shadow-xl">
+                    <img src={BoyLogo} alt="Kannama Logo" className="w-28 h-28 object-contain drop-shadow-xl filter brightness-110" />
+                  </div>
                 </div>
                 <div className="text-left">
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
                     Kannama
                   </h1>
                   <p className="text-base text-gray-600 font-medium">Study Tracker</p>

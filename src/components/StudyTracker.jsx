@@ -75,10 +75,8 @@ const StudyTrackerApp = ({ session }) => {
     keyPoints: ''
   });
   const [examChapterInput, setExamChapterInput] = useState('');
-  const [_editingExamChapter, _setEditingExamChapter] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
   const [minimizedExams, setMinimizedExams] = useState({});
-  const [_showEditExam, _setShowEditExam] = useState(false);
   const [newReminder, setNewReminder] = useState({
     title: '',
     date: '',

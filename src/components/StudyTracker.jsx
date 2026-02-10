@@ -94,12 +94,13 @@ const StudyTrackerApp = ({ session }) => {
     end_time: '20:00',
     days: [] // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
   });
-  const [showRecurringReminderForm, setShowRecurringReminderForm] = useState(false);
+  const [reminderType, setReminderType] = useState('one-time'); // 'one-time' or 'recurring'
   const [editingRecurringReminder, setEditingRecurringReminder] = useState(null);
   const [recurringReminders, setRecurringReminders] = useState([]);
   const [notificationsMinimized, setNotificationsMinimized] = useState(false);
   const [todayNotificationsMinimized, setTodayNotificationsMinimized] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState([]);
+  const [showAllReminders, setShowAllReminders] = useState(false);
 
   // Load account name from metadata or localStorage
   useEffect(() => {
@@ -1068,7 +1069,7 @@ const StudyTrackerApp = ({ session }) => {
         }
         
         setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
-        setShowRecurringReminderForm(false);
+        setShowAddReminder(false);
       } catch (error) {
         console.error('Error adding recurring reminder:', error);
         alert('Failed to add recurring reminder: ' + error.message);
@@ -1120,7 +1121,8 @@ const StudyTrackerApp = ({ session }) => {
       end_time: reminder.end_time || '20:00',
       days: reminder.days
     });
-    setShowRecurringReminderForm(true);
+    setReminderType('recurring');
+    setShowAddReminder(false); // Close the add form if open
   };
 
   const saveEditRecurringReminder = async () => {
@@ -1148,7 +1150,6 @@ const StudyTrackerApp = ({ session }) => {
       );
       setRecurringReminders(updatedReminders);
       setEditingRecurringReminder(null);
-      setShowRecurringReminderForm(false);
       setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
     } catch (error) {
       console.error('Error updating recurring reminder:', error);
@@ -1195,6 +1196,108 @@ const StudyTrackerApp = ({ session }) => {
     const nowIST = getISTNow();
     const dayOfWeek = nowIST.getDay();
     return recurringReminders.filter(r => r.days && r.days.includes(dayOfWeek));
+  };
+
+  // Combine and prioritize all reminders (both one-time and recurring)
+  const getCombinedReminders = () => {
+    const todayIST = getTodayDateIST();
+    const nowIST = getISTNow();
+    const currentDayOfWeek = nowIST.getDay();
+    
+    // Get one-time reminders
+    const oneTimeReminders = reminders
+      .filter(r => r.date >= todayIST)
+      .map(r => {
+        const reminderDate = new Date(r.date);
+        const today = new Date(todayIST);
+        const daysUntil = Math.ceil((reminderDate - today) / (1000 * 60 * 60 * 24));
+        
+        return {
+          id: r.id,
+          type: 'one-time',
+          title: r.title,
+          description: r.description,
+          date: r.date,
+          displayDate: new Date(r.date).toLocaleDateString(),
+          daysUntil,
+          priority: daysUntil === 0 ? 'today' : daysUntil <= 7 ? 'urgent' : 'normal',
+          isToday: daysUntil === 0,
+          sortKey: r.date,
+          original: r
+        };
+      });
+    
+    // Get recurring reminders with next occurrence calculation
+    const recurringRemindersList = recurringReminders.map(r => {
+      const isToday = r.days && r.days.includes(currentDayOfWeek);
+      
+      // Calculate next occurrence
+      let nextOccurrence = null;
+      let daysUntil = 999; // Large number for sorting
+      
+      if (r.days && r.days.length > 0) {
+        // Find the nearest day
+        const sortedDays = [...r.days].sort((a, b) => a - b);
+        let foundNext = false;
+        
+        // First check if any day is today or after today this week
+        for (const day of sortedDays) {
+          if (day >= currentDayOfWeek) {
+            daysUntil = day - currentDayOfWeek;
+            foundNext = true;
+            break;
+          }
+        }
+        
+        // If not found, take the first day of next week
+        if (!foundNext) {
+          daysUntil = (7 - currentDayOfWeek) + sortedDays[0];
+        }
+        
+        const nextDate = new Date(nowIST);
+        nextDate.setDate(nextDate.getDate() + daysUntil);
+        nextOccurrence = nextDate.toISOString().split('T')[0];
+      }
+      
+      const daysText = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const daysNames = r.days ? r.days.map(d => daysText[d]).join(', ') : '';
+      
+      return {
+        id: r.id,
+        type: 'recurring',
+        title: r.title,
+        description: r.description,
+        time: r.time,
+        end_time: r.end_time,
+        days: r.days,
+        daysNames,
+        displayDate: `${daysNames} · ${convertTo12Hour(r.time)}-${convertTo12Hour(r.end_time)}`,
+        nextOccurrence,
+        daysUntil,
+        priority: isToday ? 'today' : daysUntil <= 7 ? 'urgent' : 'normal',
+        isToday,
+        sortKey: nextOccurrence || '9999-12-31',
+        original: r
+      };
+    });
+    
+    // Combine and sort by priority and date
+    const combined = [...oneTimeReminders, ...recurringRemindersList];
+    
+    // Sort: today first, then by days until, then by date
+    combined.sort((a, b) => {
+      // Today's reminders first
+      if (a.isToday && !b.isToday) return -1;
+      if (!a.isToday && b.isToday) return 1;
+      
+      // Then by days until
+      if (a.daysUntil !== b.daysUntil) return a.daysUntil - b.daysUntil;
+      
+      // Then by date
+      return a.sortKey.localeCompare(b.sortKey);
+    });
+    
+    return combined;
   };
 
   // Get upcoming exams
@@ -2635,32 +2738,25 @@ const StudyTrackerApp = ({ session }) => {
                       <h2 className="text-2xl font-bold text-gray-800">Reminders</h2>
                       {notificationsMinimized && (
                         <p className="text-xs text-gray-600">
-                          {getUpcomingReminders().length} upcoming • {recurringReminders.length} recurring
+                          {getCombinedReminders().length} total reminders
                         </p>
                       )}
                     </div>
                   </div>
                   <div className="flex gap-2">
                     {!notificationsMinimized && (
-                      <>
-                        <button
-                          onClick={() => setShowRecurringReminderForm(!showRecurringReminderForm)}
-                          className="text-xs px-3 py-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-all"
-                          title="Recurring (e.g., Tuition every Mon/Wed/Thu)"
-                        >
-                          ↻ Recurring
-                        </button>
-                        <button
-                          onClick={() => {
-                            const todayDate = getTodayDateIST();
-                            setNewReminder({ title: '', date: todayDate, description: '' });
-                            setShowAddReminder(true);
-                          }}
-                          className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
-                        >
-                          <Plus className="w-5 h-5" />
-                        </button>
-                      </>
+                      <button
+                        onClick={() => {
+                          const todayDate = getTodayDateIST();
+                          setNewReminder({ title: '', date: todayDate, description: '' });
+                          setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
+                          setReminderType('one-time');
+                          setShowAddReminder(true);
+                        }}
+                        className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
                     )}
                     <button
                       onClick={() => setNotificationsMinimized(!notificationsMinimized)}
@@ -2682,41 +2778,140 @@ const StudyTrackerApp = ({ session }) => {
                   <div className="p-6">
                 
                 {showAddReminder && (
-                  <div className="mb-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200 space-y-3">
-                    <h3 className="font-bold text-gray-800">Add One-Time Reminder</h3>
+                  <div className="mb-4 p-5 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-300 space-y-4 shadow-lg">
+                    <h3 className="font-bold text-gray-800 text-lg">Add Reminder</h3>
+                    
+                    {/* Reminder Type Selector */}
+                    <div className="flex gap-2 p-1 bg-white rounded-lg border-2 border-indigo-200">
+                      <button
+                        onClick={() => setReminderType('one-time')}
+                        className={`flex-1 py-2 px-4 rounded-md font-semibold transition-all ${
+                          reminderType === 'one-time'
+                            ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        📅 One-Time
+                      </button>
+                      <button
+                        onClick={() => setReminderType('recurring')}
+                        className={`flex-1 py-2 px-4 rounded-md font-semibold transition-all ${
+                          reminderType === 'recurring'
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        🔁 Recurring
+                      </button>
+                    </div>
+
                     <input
                       type="text"
-                      placeholder="Reminder title"
-                      value={newReminder.title}
-                      onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
-                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder={reminderType === 'one-time' ? 'Reminder title' : 'Reminder title (e.g., Tuition, Sports class)'}
+                      value={reminderType === 'one-time' ? newReminder.title : newRecurringReminder.title}
+                      onChange={(e) => {
+                        if (reminderType === 'one-time') {
+                          setNewReminder({ ...newReminder, title: e.target.value });
+                        } else {
+                          setNewRecurringReminder({ ...newRecurringReminder, title: e.target.value });
+                        }
+                      }}
+                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium"
                     />
-                    <input
-                      type="date"
-                      value={newReminder.date}
-                      onChange={(e) => setNewReminder({ ...newReminder, date: e.target.value })}
-                      className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
+
+                    {reminderType === 'one-time' ? (
+                      <input
+                        type="date"
+                        value={newReminder.date}
+                        onChange={(e) => setNewReminder({ ...newReminder, date: e.target.value })}
+                        className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    ) : (
+                      <>
+                        <div className="flex gap-3">
+                          <div className="flex-1">
+                            <label className="text-sm text-gray-700 font-bold block mb-2">🕐 Start Time</label>
+                            <input
+                              type="time"
+                              value={newRecurringReminder.time}
+                              onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, time: e.target.value })}
+                              className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-sm text-gray-700 font-bold block mb-2">🕐 End Time</label>
+                            <input
+                              type="time"
+                              value={newRecurringReminder.end_time}
+                              onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, end_time: e.target.value })}
+                              className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-gray-700">📅 Select Days:</label>
+                          <div className="flex flex-wrap gap-2">
+                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  const newDays = newRecurringReminder.days.includes(idx)
+                                    ? newRecurringReminder.days.filter(d => d !== idx)
+                                    : [...newRecurringReminder.days, idx];
+                                  setNewRecurringReminder({ ...newRecurringReminder, days: newDays });
+                                }}
+                                className={`px-4 py-2 rounded-lg font-bold transition-all shadow-md ${
+                                  newRecurringReminder.days.includes(idx)
+                                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white scale-105'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                {day}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
                     <textarea
                       placeholder="Description (optional)"
-                      value={newReminder.description}
-                      onChange={(e) => setNewReminder({ ...newReminder, description: e.target.value })}
+                      value={reminderType === 'one-time' ? newReminder.description : newRecurringReminder.description}
+                      onChange={(e) => {
+                        if (reminderType === 'one-time') {
+                          setNewReminder({ ...newReminder, description: e.target.value });
+                        } else {
+                          setNewRecurringReminder({ ...newRecurringReminder, description: e.target.value });
+                        }
+                      }}
                       className="w-full p-3 border-2 border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       rows="2"
                     />
                     <div className="flex gap-2">
                       <button
-                        onClick={addReminder}
-                        className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg transition-all"
+                        onClick={() => {
+                          if (reminderType === 'one-time') {
+                            addReminder();
+                          } else {
+                            addRecurringReminder();
+                          }
+                        }}
+                        className={`flex-1 text-white py-3 rounded-lg font-bold shadow-lg transition-all ${
+                          reminderType === 'one-time'
+                            ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
+                            : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                        }`}
                       >
-                        Add
+                        {reminderType === 'one-time' ? '➕ Add Reminder' : '➕ Add Recurring Reminder'}
                       </button>
                       <button
                         onClick={() => {
                           setShowAddReminder(false);
                           setNewReminder({ title: '', date: '', description: '' });
+                          setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
+                          setReminderType('one-time');
                         }}
-                        className="px-6 bg-gray-200 text-gray-600 py-3 rounded-lg hover:bg-gray-300 font-semibold transition-all"
+                        className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 font-bold transition-all"
                       >
                         Cancel
                       </button>
@@ -2769,55 +2964,222 @@ const StudyTrackerApp = ({ session }) => {
               
               <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-amber-600" />
-                Upcoming Reminders
+                All Reminders
               </h3>
-              {getUpcomingReminders().length === 0 ? (
-                <p className="text-gray-500 text-center py-8 italic">No upcoming reminders</p>
-              ) : (
-                <div className="space-y-3">
-                  {getUpcomingReminders().map(reminder => (
-                    <div 
-                      key={reminder.id} 
-                      className="group p-4 bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-xl cursor-pointer hover:shadow-lg transition-all" 
-                      onClick={() => setExpandedReminders({...expandedReminders, [reminder.id]: !expandedReminders[reminder.id]})}
-                    >
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-1" />
-                        <div className="flex-1">
-                          <div className="font-bold text-gray-800">{reminder.title}</div>
-                          <div className="text-sm text-gray-600 mt-1">📅 {new Date(reminder.date).toLocaleDateString()}</div>
-                          {reminder.description && (
-                            <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? "" : "line-clamp-2"}`}>
-                              {reminder.description}
-                              {!expandedReminders[reminder.id] && <span className="text-amber-700 font-semibold ml-1">... (click to expand)</span>}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button
-                            onClick={(e) => {e.stopPropagation(); startEditReminder(reminder);}}
-                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {e.stopPropagation(); deleteReminder(reminder.id);}}
-                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
               
-              {showRecurringReminderForm && (
+              {(() => {
+                const allReminders = getCombinedReminders();
+                const thisWeekReminders = allReminders.filter(r => r.daysUntil <= 7);
+                const laterReminders = allReminders.filter(r => r.daysUntil > 7);
+                
+                if (allReminders.length === 0) {
+                  return <p className="text-gray-500 text-center py-8 italic">No reminders</p>;
+                }
+                
+                return (
+                  <>
+                    {thisWeekReminders.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4 italic">No reminders this week</p>
+                    ) : (
+                      <div className="space-y-3 mb-4">
+                        {thisWeekReminders.map(reminder => (
+                          <div 
+                            key={`${reminder.type}-${reminder.id}`}
+                            className={`group p-4 rounded-xl cursor-pointer hover:shadow-lg transition-all ${
+                              reminder.isToday 
+                                ? 'bg-gradient-to-br from-green-100 to-emerald-100 border-2 border-green-400 shadow-md' 
+                                : reminder.priority === 'urgent'
+                                ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300'
+                                : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200'
+                            }`}
+                            onClick={() => setExpandedReminders({...expandedReminders, [`${reminder.type}-${reminder.id}`]: !expandedReminders[`${reminder.type}-${reminder.id}`]})}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-shrink-0 mt-1">
+                                {reminder.type === 'recurring' ? (
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-md ${
+                                    reminder.isToday ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white animate-pulse' : 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
+                                  }`}>
+                                    {reminder.isToday ? '⭐' : '🔔'}
+                                  </div>
+                                ) : (
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md ${
+                                    reminder.isToday ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white' : 'bg-gradient-to-br from-amber-500 to-orange-500 text-white'
+                                  }`}>
+                                    <AlertCircle className="w-6 h-6" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <div className="font-bold text-gray-800 text-lg">{reminder.title}</div>
+                                  {reminder.isToday && (
+                                    <span className="text-xs bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 py-1 rounded-full font-bold shadow-md">
+                                      ✨ TODAY
+                                    </span>
+                                  )}
+                                  {reminder.type === 'recurring' && (
+                                    <span className="text-xs bg-gradient-to-r from-blue-500 to-purple-500 text-white px-2 py-1 rounded-full font-bold">
+                                      🔁 Recurring
+                                    </span>
+                                  )}
+                                  {!reminder.isToday && reminder.priority === 'urgent' && (
+                                    <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-2 py-1 rounded-full font-bold">
+                                      ⚡ {reminder.daysUntil === 1 ? 'Tomorrow' : `${reminder.daysUntil} days`}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-700 font-semibold">
+                                  📅 {reminder.displayDate}
+                                </div>
+                                {reminder.description && (
+                                  <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[`${reminder.type}-${reminder.id}`] ? '' : 'line-clamp-2'}`}>
+                                    {reminder.description}
+                                    {!expandedReminders[`${reminder.type}-${reminder.id}`] && <span className="text-blue-700 font-bold ml-1">... (click to expand)</span>}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-2 flex-shrink-0">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (reminder.type === 'recurring') {
+                                      startEditRecurringReminder(reminder.original);
+                                    } else {
+                                      startEditReminder(reminder.original);
+                                    }
+                                  }}
+                                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (reminder.type === 'recurring') {
+                                      deleteRecurringReminder(reminder.id);
+                                    } else {
+                                      deleteReminder(reminder.id);
+                                    }
+                                  }}
+                                  className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {laterReminders.length > 0 && (
+                      <div className="mt-4 border-t-2 border-gray-200 pt-4">
+                        <button
+                          onClick={() => setShowAllReminders(!showAllReminders)}
+                          className="w-full p-3 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 rounded-lg font-semibold text-gray-700 transition-all flex items-center justify-center gap-2"
+                        >
+                          {showAllReminders ? (
+                            <>
+                              <ChevronUp className="w-5 h-5" />
+                              Hide Later Reminders ({laterReminders.length})
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-5 h-5" />
+                              Show Later Reminders ({laterReminders.length})
+                            </>
+                          )}
+                        </button>
+                        
+                        {showAllReminders && (
+                          <div className="space-y-3 mt-4">
+                            {laterReminders.map(reminder => (
+                              <div 
+                                key={`${reminder.type}-${reminder.id}`}
+                                className="group p-4 bg-gradient-to-br from-gray-50 to-slate-50 border-2 border-gray-300 rounded-xl cursor-pointer hover:shadow-lg transition-all opacity-75 hover:opacity-100"
+                                onClick={() => setExpandedReminders({...expandedReminders, [`${reminder.type}-${reminder.id}`]: !expandedReminders[`${reminder.type}-${reminder.id}`]})}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-shrink-0 mt-1">
+                                    {reminder.type === 'recurring' ? (
+                                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-md bg-gradient-to-br from-gray-400 to-gray-600 text-white">
+                                        🔔
+                                      </div>
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-gray-400 to-gray-600 text-white">
+                                        <AlertCircle className="w-6 h-6" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                      <div className="font-bold text-gray-800 text-lg">{reminder.title}</div>
+                                      {reminder.type === 'recurring' && (
+                                        <span className="text-xs bg-gradient-to-r from-gray-400 to-gray-600 text-white px-2 py-1 rounded-full font-bold">
+                                          🔁 Recurring
+                                        </span>
+                                      )}
+                                      <span className="text-xs bg-gray-300 text-gray-700 px-2 py-1 rounded-full font-bold">
+                                        {reminder.daysUntil} days away
+                                      </span>
+                                    </div>
+                                    <div className="text-sm text-gray-600 font-semibold">
+                                      📅 {reminder.displayDate}
+                                    </div>
+                                    {reminder.description && (
+                                      <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[`${reminder.type}-${reminder.id}`] ? '' : 'line-clamp-2'}`}>
+                                        {reminder.description}
+                                        {!expandedReminders[`${reminder.type}-${reminder.id}`] && <span className="text-gray-600 font-bold ml-1">... (click to expand)</span>}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-2 flex-shrink-0">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (reminder.type === 'recurring') {
+                                          startEditRecurringReminder(reminder.original);
+                                        } else {
+                                          startEditReminder(reminder.original);
+                                        }
+                                      }}
+                                      className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                                      title="Edit"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (reminder.type === 'recurring') {
+                                          deleteRecurringReminder(reminder.id);
+                                        } else {
+                                          deleteReminder(reminder.id);
+                                        }
+                                      }}
+                                      className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+              
+{editingRecurringReminder && (
                 <div className="mb-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-300 space-y-4 shadow-lg">
-                  <h3 className="font-bold text-gray-800 text-lg">{editingRecurringReminder ? '✏️ Edit Recurring Reminder' : '➕ Add Recurring Reminder'}</h3>
+                  <h3 className="font-bold text-gray-800 text-lg">✏️ Edit Recurring Reminder</h3>
                   <input
                     type="text"
                     placeholder="Reminder title (e.g., Tuition, Sports class)"
@@ -2877,14 +3239,13 @@ const StudyTrackerApp = ({ session }) => {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={editingRecurringReminder ? saveEditRecurringReminder : addRecurringReminder}
+                      onClick={saveEditRecurringReminder}
                       className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 font-bold shadow-lg transition-all"
                     >
-                      {editingRecurringReminder ? '💾 Save Changes' : '➕ Add Recurring Reminder'}
+                      💾 Save Changes
                     </button>
                     <button
                       onClick={() => {
-                        setShowRecurringReminderForm(false);
                         setEditingRecurringReminder(null);
                         setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
                       }}
@@ -2897,82 +3258,6 @@ const StudyTrackerApp = ({ session }) => {
               )}
             </div>
           </div>
-
-            {/* Recurring Reminders */}
-            {recurringReminders.length > 0 && (
-              <div className="bg-white rounded-xl shadow-xl p-6 mt-6 border-2 border-purple-200">
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent flex items-center gap-2">
-                    🔁 Recurring Reminders
-                  </h2>
-                  <span className="text-sm text-gray-600 bg-purple-50 px-3 py-1 rounded-full font-semibold">Shows on scheduled days</span>
-                </div>
-                <div className="space-y-3">
-                  {recurringReminders.map(reminder => {
-                    const todayDayOfWeek = getTodayDayOfWeekIST();
-                    const isToday = reminder.days.includes(todayDayOfWeek);
-                    const daysText = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    const daysNames = reminder.days.map(d => daysText[d]).join(', ');
-                    
-                    return (
-                      <div 
-                        key={reminder.id} 
-                        className={`group p-4 rounded-xl cursor-pointer transition-all hover:shadow-lg ${
-                          isToday 
-                            ? 'bg-gradient-to-br from-green-100 to-emerald-100 border-2 border-green-400 shadow-md' 
-                            : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200'
-                        }`}
-                        onClick={() => setExpandedReminders({...expandedReminders, [reminder.id]: !expandedReminders[reminder.id]})}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 mt-1">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-md ${
-                              isToday ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white animate-pulse' : 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
-                            }`}>
-                              {isToday ? '⭐' : '🔔'}
-                            </div>
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-bold text-gray-800 text-lg flex items-center gap-2 flex-wrap">
-                              {reminder.title}
-                              {isToday && (
-                                <span className="text-xs bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 py-1 rounded-full font-bold shadow-md">
-                                  ✨ TODAY {convertTo12Hour(reminder.time)}-{convertTo12Hour(reminder.end_time)}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-700 font-semibold mt-1">📅 {daysNames}</div>
-                            <div className="text-sm text-blue-700 font-bold mt-1">🕐 {convertTo12Hour(reminder.time)} - {convertTo12Hour(reminder.end_time)}</div>
-                            {reminder.description && (
-                              <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[reminder.id] ? '' : 'line-clamp-2'}`}>
-                                {reminder.description}
-                                {!expandedReminders[reminder.id] && <span className="text-blue-700 font-bold ml-1">... (click to expand)</span>}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2 flex-shrink-0">
-                            <button
-                              onClick={(e) => {e.stopPropagation(); startEditRecurringReminder(reminder);}}
-                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {e.stopPropagation(); deleteRecurringReminder(reminder.id);}}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
                   </div>
                 </div>
               </div>

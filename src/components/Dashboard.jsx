@@ -1,14 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
-  Clock, Target, TrendingUp, Zap, Lock
+  Clock, Target, TrendingUp, Zap, Info, X, Flame
 } from 'lucide-react';
-import { getTodayDateIST } from '../utils/helpers';
+import { getTodayDateIST, calculatePoints, calculateStreak } from '../utils/helpers';
 import BadgeIcon from './BadgeIcon';
 import { BADGE_ID_MAP } from '../utils/badgeIcons';
 
-// Define ALL possible badges
+// Define ALL possible badges (Ordered by category and difficulty progression)
 const ALL_BADGES = [
-  // Daily Study Badges
+  // DAILY STUDY BADGES (Easiest to Hardest)
   {
     id: 'keep-going',
     name: 'Keep Going',
@@ -28,7 +28,8 @@ const ALL_BADGES = [
     checkUnlocked: (s) => s.studyMinutesToday >= 180,
     animate: true
   },
-  // Weekly Study Badges
+  
+  // WEEKLY STUDY BADGES (Easiest to Hardest)
   {
     id: 'weekly-warrior',
     name: 'Weekly Warrior',
@@ -58,7 +59,17 @@ const ALL_BADGES = [
     animate: true,
     special: true
   },
-  // Achievement Badges
+  
+  // ACHIEVEMENT BADGES (Easiest to Hardest)
+  {
+    id: 'knowledge-seeker',
+    name: 'Knowledge Seeker',
+    description: '5+ subjects',
+    requirement: 'Study 5+ different subjects',
+    tier: 'common',
+    category: 'achievement',
+    checkUnlocked: (s) => s.totalSubjects >= 5
+  },
   {
     id: 'star-student',
     name: 'Star Student',
@@ -76,15 +87,6 @@ const ALL_BADGES = [
     tier: 'rare',
     category: 'achievement',
     checkUnlocked: (s) => s.completedToday >= 5
-  },
-  {
-    id: 'knowledge-seeker',
-    name: 'Knowledge Seeker',
-    description: '5+ subjects',
-    requirement: 'Study 5+ different subjects',
-    tier: 'common',
-    category: 'achievement',
-    checkUnlocked: (s) => s.totalSubjects >= 5
   }
 ];
 
@@ -95,6 +97,47 @@ const Dashboard = ({
   profiles, 
   activeProfile 
 }) => {
+  const [showPointsInfo, setShowPointsInfo] = useState(false);
+  const [showBadgeInfo, setShowBadgeInfo] = useState(false);
+  
+  // Calculate current streak
+  const currentStreak = useMemo(() => calculateStreak(tasks), [tasks]);
+  
+  // Get current week (Monday to Sunday) for calendar
+  const streakCalendar = useMemo(() => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const calendar = [];
+    
+    // Calculate days from Monday (0 = Mon, 1 = Tue, ..., 6 = Sun)
+    const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1;
+    
+    // Get Monday of current week
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - daysFromMonday);
+    
+    // Build 7-day week from Monday to Sunday
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayTasks = tasks.filter(t => t.date === dateStr);
+      const completedTasks = dayTasks.filter(t => t.completed);
+      
+      calendar.push({
+        date: dateStr,
+        day: date.getDate(),
+        dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        hasActivity: completedTasks.length > 0,
+        taskCount: completedTasks.length,
+        isToday: dateStr === getTodayDateIST()
+      });
+    }
+    
+    return calendar;
+  }, [tasks]);
+  
   // Calculate stats
   const stats = useMemo(() => {
     const today = getTodayDateIST();
@@ -149,29 +192,51 @@ const Dashboard = ({
     }));
   }, [stats, subjects.length]);
 
-  // Mock leaderboard data (you can replace with real profile stats)
+  // Calculate leaderboard with real points
   const leaderboard = useMemo(() => {
-    return profiles.map(p => ({
-      ...p,
-      // You would calculate real stats here from each profile's tasks
-      points: Math.floor(Math.random() * 5000) + 1000,
-    }))
+    return profiles.map(profile => {
+      // Get tasks for this profile
+      const profileTasks = tasks.filter(t => t.profileId === profile.id);
+      
+      // Get unlocked badges for this profile
+      const profileStats = {
+        completedToday: profileTasks.filter(t => t.completed && t.date === getTodayDateIST()).length,
+        studyMinutesToday: profileTasks
+          .filter(t => t.completed && t.date === getTodayDateIST())
+          .reduce((sum, t) => sum + (t.duration || 0), 0),
+        studyMinutesWeek: profileTasks
+          .filter(t => {
+            const today = getTodayDateIST();
+            const weekAgo = new Date(today);
+            weekAgo.setDate(weekAgo.getDate() - 6);
+            const weekAgoStr = weekAgo.toISOString().split('T')[0];
+            return t.completed && t.date >= weekAgoStr && t.date <= today;
+          })
+          .reduce((sum, t) => sum + (t.duration || 0), 0),
+        completionRate: profileTasks.length > 0
+          ? Math.round((profileTasks.filter(t => t.completed).length / profileTasks.length) * 100)
+          : 0,
+        totalSubjects: subjects.length
+      };
+      
+      const unlockedBadges = ALL_BADGES.filter(badge => 
+        badge.checkUnlocked(profileStats)
+      );
+      
+      // Get exams for this profile
+      const profileExams = exams.filter(e => e.profile_id === profile.id);
+      
+      // Calculate real points
+      const points = calculatePoints(profile, profileTasks, unlockedBadges, profileExams);
+      
+      return {
+        ...profile,
+        points
+      };
+    })
     .sort((a, b) => b.points - a.points)
     .slice(0, 5);
-  }, [profiles]);
-
-  const subjectIcons = {
-    'Mathematics': '🔢',
-    'Science': '🔬',
-    'English': '📚',
-    'Social Studies': '🌍',
-    'History': '📜',
-    'Geography': '🗺️',
-    'Physics': '⚛️',
-    'Chemistry': '🧪',
-    'Biology': '🧬',
-    'Computer Science': '💻',
-  };
+  }, [profiles, tasks, subjects, exams]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
@@ -238,45 +303,115 @@ const Dashboard = ({
               </div>
             </div>
 
-            {/* Select Category - Subjects */}
+            {/* Study Streak Section - Duolingo Style */}
             <div className="bg-white rounded-2xl p-6 shadow-card">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-gray-800">Select Subject</h2>
-                  <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs font-semibold">
-                    {subjects.length}
-                  </span>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold text-gray-800">Study Streak</h2>
+                <Flame className="w-5 h-5 text-orange-500" />
+              </div>
+              
+              {/* Main Streak Counter */}
+              <div className="flex items-center justify-center mb-6">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-red-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
+                  <div className="relative bg-gradient-to-br from-orange-400 to-red-500 rounded-full p-8 shadow-lg">
+                    <Flame className="w-16 h-16 text-white" />
+                  </div>
+                </div>
+                <div className="ml-6">
+                  <div className="text-6xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
+                    {currentStreak}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-600 mt-1">
+                    day{currentStreak !== 1 ? 's' : ''} streak
+                  </div>
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {subjects.slice(0, 8).map((subject, idx) => {
-                  const colors = [
-                    'bg-red-50 text-red-600',
-                    'bg-blue-50 text-blue-600',
-                    'bg-green-50 text-green-600',
-                    'bg-purple-50 text-purple-600',
-                    'bg-orange-50 text-orange-600',
-                    'bg-pink-50 text-pink-600',
-                    'bg-cyan-50 text-cyan-600',
-                    'bg-amber-50 text-amber-600',
-                  ];
-                  const colorClass = colors[idx % colors.length];
-                  
-                  return (
-                    <button
-                      key={subject.id}
-                      className={`${colorClass} rounded-xl p-4 text-center hover:scale-105 transition-transform cursor-pointer`}
+              {/* Motivational Message */}
+              <div className="text-center mb-6">
+                {stats.completedToday === 0 && (
+                  <p className="text-sm text-gray-600">
+                    🌟 Complete a task today to keep your streak going!
+                  </p>
+                )}
+                {stats.completedToday > 0 && currentStreak < 7 && (
+                  <p className="text-sm text-orange-600 font-semibold">
+                    🔥 Great work today! {7 - currentStreak} more day{7 - currentStreak !== 1 ? 's' : ''} to reach 7-day milestone!
+                  </p>
+                )}
+                {currentStreak >= 7 && currentStreak < 14 && (
+                  <p className="text-sm text-orange-600 font-semibold">
+                    🎉 Amazing streak! {14 - currentStreak} day{14 - currentStreak !== 1 ? 's' : ''} to 2-week milestone!
+                  </p>
+                )}
+                {currentStreak >= 14 && currentStreak < 30 && (
+                  <p className="text-sm text-orange-600 font-semibold">
+                    🏆 Incredible! {30 - currentStreak} day{30 - currentStreak !== 1 ? 's' : ''} to 30-day champion!
+                  </p>
+                )}
+                {currentStreak >= 30 && (
+                  <p className="text-sm bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent font-bold">
+                    👑 You're a Study Champion! Keep this legendary streak alive!
+                  </p>
+                )}
+              </div>
+              
+              {/* Calendar Heatmap - Current Week (Mon-Sun) */}
+              <div className="mb-4">
+                <div className="text-xs font-semibold text-gray-600 mb-3">This Week</div>
+                <div className="grid grid-cols-7 gap-2">
+                  {streakCalendar.map((day, idx) => (
+                    <div key={idx} className="flex flex-col items-center">
+                      <div className="text-xs text-gray-500 mb-1">{day.dayName[0]}</div>
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
+                          day.hasActivity
+                            ? day.isToday
+                              ? 'bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-lg scale-110 ring-2 ring-orange-300'
+                              : 'bg-gradient-to-br from-orange-300 to-red-400 text-white shadow-md hover:scale-105'
+                            : day.isToday
+                            ? 'bg-gray-200 text-gray-400 ring-2 ring-gray-300'
+                            : 'bg-gray-100 text-gray-300'
+                        }`}
+                        title={`${day.date}: ${day.taskCount} task${day.taskCount !== 1 ? 's' : ''} completed`}
+                      >
+                        {day.isToday ? '•' : day.hasActivity ? '✓' : day.day}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Streak Milestones - Compact */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { days: 7, label: '7-Day', bonus: 200, emoji: '🔥' },
+                    { days: 14, label: '14-Day', bonus: 400, emoji: '⚔️' },
+                    { days: 30, label: '30-Day', bonus: 1000, emoji: '🏆' }
+                  ].map((milestone) => (
+                    <div
+                      key={milestone.days}
+                      className={`p-2 rounded-lg text-center transition-all ${
+                        currentStreak >= milestone.days
+                          ? 'bg-gradient-to-br from-orange-100 to-red-100 border-2 border-orange-400'
+                          : 'bg-gray-50 border border-gray-200'
+                      }`}
                     >
-                      <div className="text-3xl mb-2">
-                        {subjectIcons[subject.name] || '📖'}
+                      <div className="text-xl mb-1">{milestone.emoji}</div>
+                      <div className={`text-xs font-bold ${
+                        currentStreak >= milestone.days ? 'text-orange-600' : 'text-gray-500'
+                      }`}>
+                        {milestone.label}
                       </div>
-                      <div className="text-xs font-semibold truncate">
-                        {subject.name}
-                      </div>
-                    </button>
-                  );
-                })}
+                      <div className="text-xs text-gray-500 mt-0.5">+{milestone.bonus}</div>
+                      {currentStreak >= milestone.days && (
+                        <div className="text-xs text-green-600 font-bold mt-1">✓</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -341,14 +476,104 @@ const Dashboard = ({
                     {allBadgesWithStatus.filter(b => b.unlocked).length}/{allBadgesWithStatus.length}
                   </span>
                 </div>
-                <div className="text-xs text-gray-500">
-                  <Lock className="w-3 h-3 inline mr-1" />
-                  Locked
-                </div>
+                <button
+                  onClick={() => setShowBadgeInfo(!showBadgeInfo)}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  title="Learn about badges"
+                >
+                  <Info className="w-5 h-5 text-gray-600" />
+                </button>
               </div>
+              
+              {/* Badge Info Tooltip */}
+              {showBadgeInfo && (
+                <div className="mb-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200 relative">
+                  <button
+                    onClick={() => setShowBadgeInfo(false)}
+                    className="absolute top-2 right-2 p-1 hover:bg-white rounded-full transition-colors"
+                  >
+                    <X className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <h3 className="font-bold text-gray-800 mb-3 text-sm flex items-center gap-2">
+                    🏅 How Badges Work
+                  </h3>
+                  <div className="space-y-3 text-xs text-gray-700">
+                    <div>
+                      <p className="font-semibold text-gray-800 mb-1">🎯 How to Unlock Badges:</p>
+                      <p className="text-gray-600 leading-relaxed">
+                        Complete tasks, study regularly, and reach milestones to unlock badges! Each badge has specific requirements - check what you need to do when hovering over locked badges.
+                      </p>
+                    </div>
+                    
+                    <div className="border-t border-purple-200 pt-2">
+                      <p className="font-semibold text-gray-800 mb-2">🌟 Badge Tiers & Rewards:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-white rounded-lg p-2">
+                          <div className="flex items-center gap-1 mb-1">
+                            <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                            <span className="font-bold text-gray-700">Common</span>
+                          </div>
+                          <p className="text-gray-600 text-[10px]">Easy to get</p>
+                          <p className="font-bold text-blue-600 text-xs">+50 points</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <div className="flex items-center gap-1 mb-1">
+                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                            <span className="font-bold text-blue-700">Rare</span>
+                          </div>
+                          <p className="text-gray-600 text-[10px]">Takes effort</p>
+                          <p className="font-bold text-blue-600 text-xs">+100 points</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <div className="flex items-center gap-1 mb-1">
+                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                            <span className="font-bold text-purple-700">Epic</span>
+                          </div>
+                          <p className="text-gray-600 text-[10px]">Challenging!</p>
+                          <p className="font-bold text-purple-600 text-xs">+200 points</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-2">
+                          <div className="flex items-center gap-1 mb-1">
+                            <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                            <span className="font-bold text-orange-700">Legendary</span>
+                          </div>
+                          <p className="text-gray-600 text-[10px]">Super hard!</p>
+                          <p className="font-bold text-orange-600 text-xs">+500 points</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-purple-200 pt-2">
+                      <p className="font-semibold text-gray-800 mb-1">💡 Pro Tips:</p>
+                      <ul className="space-y-1 text-gray-600 text-[11px] list-disc list-inside">
+                        <li>Start with <strong>Common</strong> badges - they're easier to unlock!</li>
+                        <li>Focus on <strong>Daily</strong> badges first for quick wins</li>
+                        <li><strong>Weekly</strong> badges give more points but need consistency</li>
+                        <li>Collect all badges to become the ultimate champion! 🏆</li>
+                      </ul>
+                    </div>
+                    
+                    <div className="bg-gradient-to-r from-yellow-100 to-orange-100 rounded-lg p-2 mt-2">
+                      <p className="font-bold text-orange-800 text-xs mb-1">✨ Why Collect Badges?</p>
+                      <p className="text-orange-700 text-[10px]">
+                        Badges boost your leaderboard score and show off your study achievements. Higher tier badges = more points = higher rank!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {allBadgesWithStatus.map((badge) => {
+                  // Tier colors and labels
+                  const tierConfig = {
+                    common: { color: 'bg-gray-500', label: 'Common', textColor: 'text-gray-500' },
+                    rare: { color: 'bg-blue-500', label: 'Rare', textColor: 'text-blue-500' },
+                    epic: { color: 'bg-purple-500', label: 'Epic', textColor: 'text-purple-500' },
+                    legendary: { color: 'bg-orange-500', label: 'Legendary', textColor: 'text-orange-500' }
+                  };
+                  const tier = tierConfig[badge.tier] || tierConfig.common;
+                  
                   return (
                     <div
                       key={badge.id}
@@ -359,6 +584,11 @@ const Dashboard = ({
                       }`}
                       title={badge.unlocked ? badge.description : badge.requirement}
                     >
+                      {/* Tier Badge */}
+                      <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-10 ${tier.color} text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase shadow-sm`}>
+                        {tier.label}
+                      </div>
+                      
                       {/* Badge Icon */}
                       <div className={`w-28 h-28 mx-auto mb-1 flex items-center justify-center transition-transform duration-200 ${
                         badge.special && badge.unlocked ? 'drop-shadow-lg' : ''
@@ -386,19 +616,26 @@ const Dashboard = ({
                 })}
               </div>
               
-              {/* Category Legend */}
-              <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap gap-3 text-xs">
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded-full bg-gradient-to-br from-orange-200 to-yellow-200"></div>
-                  <span className="text-gray-600">Daily</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-200 to-cyan-200"></div>
-                  <span className="text-gray-600">Weekly</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded-full bg-gradient-to-br from-purple-200 to-pink-200"></div>
-                  <span className="text-gray-600">Achievement</span>
+              {/* Tier Legend */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="text-xs font-semibold text-gray-700 mb-2">Badge Tiers:</div>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <span className="text-gray-600">Common (50 pts)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span className="text-gray-600">Rare (100 pts)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                    <span className="text-gray-600">Epic (200 pts)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                    <span className="text-gray-600">Legendary (500 pts)</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -406,8 +643,129 @@ const Dashboard = ({
 
           {/* Sidebar - Leaderboard */}
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-card sticky top-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4">Leaderboard</h2>
+            <div className="bg-white rounded-2xl p-6 shadow-card sticky top-6 z-10">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-800">Leaderboard</h2>
+                <button
+                  onClick={() => setShowPointsInfo(!showPointsInfo)}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  title="How points are calculated"
+                >
+                  <Info className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+              
+              {/* Points Info Tooltip */}
+              {showPointsInfo && (
+                <div className="mb-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-4 border-2 border-blue-200 relative">
+                  <button
+                    onClick={() => setShowPointsInfo(false)}
+                    className="absolute top-2 right-2 p-1 hover:bg-white rounded-full transition-colors"
+                  >
+                    <X className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <h3 className="font-bold text-gray-800 mb-3 text-sm flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-yellow-500" />
+                    How to Earn Points
+                  </h3>
+                  <div className="space-y-2 text-xs text-gray-700">
+                    <div className="flex justify-between items-start">
+                      <span className="flex items-start gap-1">
+                        <span className="text-blue-600 font-bold">✓</span>
+                        <span>Complete a task</span>
+                      </span>
+                      <span className="font-bold text-blue-600">10 pts</span>
+                    </div>
+                    <div className="flex justify-between items-start">
+                      <span className="flex items-start gap-1">
+                        <span className="text-purple-600 font-bold">⏱</span>
+                        <span>Study time</span>
+                      </span>
+                      <span className="font-bold text-purple-600">1 pt/min</span>
+                    </div>
+                    <div className="border-t border-blue-200 my-2 pt-2">
+                      <div className="font-bold text-gray-800 mb-1">🏅 Badge Bonuses:</div>
+                      <div className="pl-4 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Common</span>
+                          <span className="font-bold">50 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Rare</span>
+                          <span className="font-bold">100 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Epic</span>
+                          <span className="font-bold">200 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Legendary</span>
+                          <span className="font-bold text-orange-600">500 pts</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="border-t border-blue-200 my-2 pt-2">
+                      <div className="font-bold text-gray-800 mb-1">🔥 Streak Rewards:</div>
+                      <div className="pl-4 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Daily streak</span>
+                          <span className="font-bold">25 pts/day</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">7-day bonus</span>
+                          <span className="font-bold text-orange-600">+200 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">14-day bonus</span>
+                          <span className="font-bold text-orange-600">+400 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">30-day bonus</span>
+                          <span className="font-bold text-orange-600">+1000 pts</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="border-t border-blue-200 my-2 pt-2">
+                      <div className="font-bold text-gray-800 mb-1">📊 Completion Milestones:</div>
+                      <div className="pl-4 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">50% complete</span>
+                          <span className="font-bold">50 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">75% complete</span>
+                          <span className="font-bold">100 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">90% complete</span>
+                          <span className="font-bold">200 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">100% complete</span>
+                          <span className="font-bold text-green-600">500 pts</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="border-t border-blue-200 my-2 pt-2">
+                      <div className="font-bold text-gray-800 mb-1">🎯 Exam Score Bonuses:</div>
+                      <div className="pl-4 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">&gt;90% score</span>
+                          <span className="font-bold">100 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">&gt;95% score</span>
+                          <span className="font-bold text-orange-600">200 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">100% score</span>
+                          <span className="font-bold text-green-600">300 pts</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-3">
                 {leaderboard.map((profile, idx) => {

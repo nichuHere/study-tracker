@@ -2046,7 +2046,7 @@ const StudyTrackerApp = ({ session }) => {
 
         {/* Daily View */}
         {activeView === 'daily' && (
-          <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 -m-6">
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 -m-6 mt-0">
             <div className="max-w-7xl mx-auto space-y-6">
             {/* Today's Overview Header */}
             <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
@@ -2083,9 +2083,7 @@ const StudyTrackerApp = ({ session }) => {
               <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden transition-all duration-300">
                 <div className="flex items-center justify-between p-6 bg-pastel-yellow-light border-b border-gray-100">
                   <div className="flex items-center gap-3">
-                    <div className="bg-pastel-orange rounded-xl p-3 shadow-soft">
-                      <AlertCircle className="w-6 h-6 text-orange-600" />
-                    </div>
+                    <Bell className="w-6 h-6 text-gray-700" />
                     <div>
                       <h2 className="text-2xl font-bold text-gray-800">Today's Notifications</h2>
                       {todayNotificationsMinimized && (
@@ -2131,13 +2129,11 @@ const StudyTrackerApp = ({ session }) => {
                     .filter(reminder => !isNotificationDismissed(reminder.id, 'reminder'))
                     .map((reminder) => (
                     <div key={reminder.id} className="flex items-start gap-3 p-4 bg-pastel-yellow-light border-l-4 border-pastel-orange rounded-xl hover:shadow-card transition-all">
-                      <div className="bg-pastel-orange-light rounded-full p-2 flex-shrink-0 shadow-soft">
-                        <Clock className="w-5 h-5 text-orange-600" />
-                      </div>
+                      <Clock className="w-5 h-5 text-gray-700 flex-shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 bg-pastel-orange text-orange-700 text-xs font-bold rounded-full shadow-soft">TODAY</span>
-                          <span className="font-bold text-gray-800">{reminder.title}</span>
+                          <span className="font-semibold text-gray-800">{reminder.title}</span>
                         </div>
                         {reminder.description && (
                           <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
@@ -2158,13 +2154,10 @@ const StudyTrackerApp = ({ session }) => {
                     .filter(reminder => !isNotificationDismissed(reminder.id, 'recurring'))
                     .map((reminder) => (
                     <div key={reminder.id} className="flex items-start gap-3 p-4 bg-pastel-purple-light border-l-4 border-pastel-purple rounded-xl hover:shadow-card transition-all">
-                      <div className="bg-pastel-purple rounded-full p-2 flex-shrink-0 shadow-soft">
-                        <Clock className="w-5 h-5 text-purple-600" />
-                      </div>
+                      <Repeat className="w-5 h-5 text-gray-700 flex-shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <Repeat className="w-4 h-4 text-purple-600" title="Recurring reminder" />
-                          <span className="font-bold text-gray-800">{reminder.title}</span>
+                          <span className="font-semibold text-gray-800">{reminder.title}</span>
                         </div>
                         <div className="text-sm text-gray-600 flex items-center gap-2">
                           <Clock className="w-4 h-4" />
@@ -2196,21 +2189,17 @@ const StudyTrackerApp = ({ session }) => {
                           : 'bg-pastel-blue-light border-pastel-blue'
                       }`}
                     >
-                      <div className={`rounded-full p-2 flex-shrink-0 shadow-soft ${
-                        suggestion.priority === 'high' ? 'bg-pastel-coral-light' : 'bg-pastel-blue'
-                      }`}>
-                        {suggestion.priority === 'high' ? (
-                          <AlertCircle className="w-5 h-5 text-red-500" />
-                        ) : (
-                          <Book className="w-5 h-5 text-blue-600" />
-                        )}
-                      </div>
+                      {suggestion.priority === 'high' ? (
+                        <AlertCircle className="w-5 h-5 text-gray-700 flex-shrink-0" />
+                      ) : (
+                        <Book className="w-5 h-5 text-gray-700 flex-shrink-0" />
+                      )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           {suggestion.priority === 'high' && (
                             <span className="px-2 py-0.5 bg-pastel-coral text-red-700 text-xs font-bold rounded-full shadow-soft">URGENT</span>
                           )}
-                          <span className="font-bold text-gray-800">{suggestion.message}</span>
+                          <span className="font-semibold text-gray-800">{suggestion.message}</span>
                         </div>
                         <p className="text-sm text-gray-600">{suggestion.details}</p>
                         {suggestion.chapters && suggestion.chapters.length > 0 && (
@@ -2243,9 +2232,7 @@ const StudyTrackerApp = ({ session }) => {
               <div className="bg-white rounded-2xl shadow-card p-6 border border-gray-100">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
-                    <div className="bg-pastel-green rounded-xl p-3 shadow-soft">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
-                    </div>
+                    <CheckCircle className="w-6 h-6 text-gray-700" />
                     <h2 className="text-2xl font-bold text-gray-800">Today's Tasks</h2>
                   </div>
                   <button
@@ -2445,9 +2432,7 @@ const StudyTrackerApp = ({ session }) => {
               <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden transition-all duration-300">
                 <div className="flex items-center justify-between p-6 bg-pastel-yellow-light border-b border-gray-100">
                   <div className="flex items-center gap-3">
-                    <div className="bg-pastel-orange rounded-xl p-3 shadow-soft">
-                      <Bell className="w-6 h-6 text-orange-600" />
-                    </div>
+                    <Bell className="w-6 h-6 text-gray-700" />
                     <div>
                       <h2 className="text-2xl font-bold text-gray-800">Reminders</h2>
                       {notificationsMinimized && (
@@ -2677,7 +2662,7 @@ const StudyTrackerApp = ({ session }) => {
                 )}
               
               <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-orange-600" />
+                <Bell className="w-5 h-5 text-gray-700" />
                 All Reminders
               </h3>
               
@@ -2699,55 +2684,49 @@ const StudyTrackerApp = ({ session }) => {
                         {thisWeekReminders.map(reminder => (
                           <div 
                             key={`${reminder.type}-${reminder.id}`}
-                            className={`group p-4 rounded-2xl cursor-pointer hover:shadow-card transition-all ${
+                            className={`group p-4 rounded-xl cursor-pointer transition-all border-l-4 ${
                               reminder.isToday 
-                                ? 'bg-pastel-green-light border-2 border-pastel-green shadow-soft' 
+                                ? 'bg-green-50 border-green-500 hover:shadow-md' 
                                 : reminder.priority === 'urgent'
-                                ? 'bg-pastel-orange-light border-2 border-pastel-orange shadow-soft'
-                                : 'bg-pastel-blue-light border-2 border-pastel-blue shadow-soft'
-                            }`}
+                                ? 'bg-white border-orange-400 hover:shadow-md'
+                                : 'bg-white border-blue-400 hover:shadow-md'
+                            } border border-gray-200`}
                             onClick={() => setExpandedReminders({...expandedReminders, [`${reminder.type}-${reminder.id}`]: !expandedReminders[`${reminder.type}-${reminder.id}`]})}
                           >
                             <div className="flex items-start gap-3">
                               <div className="flex-shrink-0 mt-1">
                                 {reminder.type === 'recurring' ? (
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-soft ${
-                                    reminder.isToday ? 'bg-pastel-green text-green-700 animate-pulse' : 'bg-pastel-blue text-blue-700'
-                                  }`}>
-                                    {reminder.isToday ? '⭐' : '🔔'}
-                                  </div>
+                                  <Repeat className={`w-5 h-5 ${
+                                    reminder.isToday ? 'text-green-600' : 'text-gray-600'
+                                  }`} />
                                 ) : (
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-soft ${
-                                    reminder.isToday ? 'bg-pastel-green text-green-700' : 'bg-pastel-orange text-orange-700'
-                                  }`}>
-                                    <AlertCircle className="w-6 h-6" />
-                                  </div>
+                                  <Clock className={`w-5 h-5 ${
+                                    reminder.isToday ? 'text-green-600' : 'text-gray-600'
+                                  }`} />
                                 )}
                               </div>
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <div className="font-bold text-gray-800 text-lg">{reminder.title}</div>
-                                   {reminder.type === 'recurring' && (
-                                    <Repeat className="w-4 h-4 text-purple-600" title="Recurring reminder" />
-                                  )}
+                                  <div className="font-semibold text-gray-800">{reminder.title}</div>
                                   {reminder.isToday && (
-                                    <span className="text-xs bg-accent-success text-white px-3 py-1 rounded-full font-bold shadow-soft">
-                                      ✨ TODAY
+                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                                      Today
                                     </span>
                                   )}
                                   {!reminder.isToday && reminder.priority === 'urgent' && (
-                                    <span className="text-xs bg-pastel-orange text-orange-700 px-2 py-1 rounded-full font-bold shadow-soft">
-                                      ⚡ {reminder.daysUntil === 1 ? 'Tomorrow' : `${reminder.daysUntil} days`}
+                                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">
+                                      {reminder.daysUntil === 1 ? 'Tomorrow' : `${reminder.daysUntil} days`}
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-sm text-gray-700 font-semibold">
-                                  📅 {reminder.displayDate}
+                                <div className="text-sm text-gray-600">
+                                  {reminder.displayDate}
                                 </div>
                                 {reminder.description && (
-                                  <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[`${reminder.type}-${reminder.id}`] ? '' : 'line-clamp-2'}`}>
+                                  <div className={`text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words transition-all ${
+                                    expandedReminders[`${reminder.type}-${reminder.id}`] ? '' : 'line-clamp-2'
+                                  }`}>
                                     {reminder.description}
-                                    {!expandedReminders[`${reminder.type}-${reminder.id}`] && <span className="text-blue-700 font-bold ml-1">... (click to expand)</span>}
                                   </div>
                                 )}
                               </div>
@@ -2761,7 +2740,7 @@ const StudyTrackerApp = ({ session }) => {
                                       startEditReminder(reminder.original);
                                     }
                                   }}
-                                  className="p-2 text-blue-600 hover:bg-pastel-blue-light rounded-xl transition-all shadow-soft"
+                                  className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                                   title="Edit"
                                 >
                                   <Edit2 className="w-4 h-4" />
@@ -2775,7 +2754,7 @@ const StudyTrackerApp = ({ session }) => {
                                       deleteReminder(reminder.id);
                                     }
                                   }}
-                                  className="p-2 text-rose-400 hover:bg-pastel-coral-light rounded-xl transition-all shadow-soft"
+                                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                                   title="Delete"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -2791,7 +2770,7 @@ const StudyTrackerApp = ({ session }) => {
                       <div className="mt-4 border-t-2 border-gray-200 pt-4">
                         <button
                           onClick={() => setShowAllReminders(!showAllReminders)}
-                          className="w-full p-3 bg-pastel-blue-light hover:bg-pastel-blue rounded-xl font-semibold text-gray-700 transition-all flex items-center justify-center gap-2 shadow-soft hover:shadow-card"
+                          className="w-full p-3 bg-white hover:bg-gray-50 rounded-xl font-semibold text-gray-700 transition-all flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300"
                         >
                           {showAllReminders ? (
                             <>
@@ -2811,38 +2790,32 @@ const StudyTrackerApp = ({ session }) => {
                             {laterReminders.map(reminder => (
                               <div 
                                 key={`${reminder.type}-${reminder.id}`}
-                                className="group p-4 bg-gradient-to-br from-gray-50 to-slate-50 border-2 border-gray-300 rounded-xl cursor-pointer hover:shadow-lg transition-all opacity-75 hover:opacity-100"
+                                className="group p-4 bg-white border border-gray-200 border-l-4 border-l-gray-300 rounded-xl cursor-pointer hover:shadow-md transition-all"
                                 onClick={() => setExpandedReminders({...expandedReminders, [`${reminder.type}-${reminder.id}`]: !expandedReminders[`${reminder.type}-${reminder.id}`]})}
                               >
                                 <div className="flex items-start gap-3">
                                   <div className="flex-shrink-0 mt-1">
                                     {reminder.type === 'recurring' ? (
-                                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-md bg-gradient-to-br from-gray-400 to-gray-600 text-white">
-                                        🔔
-                                      </div>
+                                      <Repeat className="w-5 h-5 text-gray-500" />
                                     ) : (
-                                      <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-md bg-gradient-to-br from-gray-400 to-gray-600 text-white">
-                                        <AlertCircle className="w-6 h-6" />
-                                      </div>
+                                      <Clock className="w-5 h-5 text-gray-500" />
                                     )}
                                   </div>
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                                      <div className="font-bold text-gray-800 text-lg">{reminder.title}</div>
-                                      {reminder.type === 'recurring' && (
-                                        <Repeat className="w-4 h-4 text-gray-500" title="Recurring reminder" />
-                                      )}
-                                      <span className="text-xs bg-gray-300 text-gray-700 px-2 py-1 rounded-full font-bold">
+                                      <div className="font-semibold text-gray-700">{reminder.title}</div>
+                                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                                         {reminder.daysUntil} days away
                                       </span>
                                     </div>
-                                    <div className="text-sm text-gray-600 font-semibold">
-                                      📅 {reminder.displayDate}
+                                    <div className="text-sm text-gray-500">
+                                      {reminder.displayDate}
                                     </div>
                                     {reminder.description && (
-                                      <div className={`text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words transition-all ${expandedReminders[`${reminder.type}-${reminder.id}`] ? '' : 'line-clamp-2'}`}>
+                                      <div className={`text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words transition-all ${
+                                        expandedReminders[`${reminder.type}-${reminder.id}`] ? '' : 'line-clamp-2'
+                                      }`}>
                                         {reminder.description}
-                                        {!expandedReminders[`${reminder.type}-${reminder.id}`] && <span className="text-gray-600 font-bold ml-1">... (click to expand)</span>}
                                       </div>
                                     )}
                                   </div>
@@ -2856,7 +2829,7 @@ const StudyTrackerApp = ({ session }) => {
                                           startEditReminder(reminder.original);
                                         }
                                       }}
-                                      className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                                      className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                                       title="Edit"
                                     >
                                       <Edit2 className="w-4 h-4" />
@@ -2870,7 +2843,7 @@ const StudyTrackerApp = ({ session }) => {
                                           deleteReminder(reminder.id);
                                         }
                                       }}
-                                      className="p-2 text-rose-400 hover:bg-rose-100 rounded-lg transition-all"
+                                      className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                                       title="Delete"
                                     >
                                       <Trash2 className="w-4 h-4" />
@@ -3727,6 +3700,78 @@ const StudyTrackerApp = ({ session }) => {
                                     </button>
                                   )}
                                 </div>
+
+                                {/* Exam Marks (visible after exam date has passed or in edit mode) */}
+                                {(daysLeft < 0 || editingExam === exam.id) && (
+                                  <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <label className="text-xs font-semibold text-gray-700">Marks:</label>
+                                      <input
+                                        type="text"
+                                        value={subject.marksInput ?? ''}
+                                        onChange={(e) => {
+                                          const input = e.target.value.trim();
+                                          let percentage = null;
+                                          
+                                          if (input) {
+                                            // Check if input is in x/y format
+                                            if (input.includes('/')) {
+                                              const parts = input.split('/');
+                                              if (parts.length === 2) {
+                                                const numerator = parseFloat(parts[0]);
+                                                const denominator = parseFloat(parts[1]);
+                                                if (!isNaN(numerator) && !isNaN(denominator) && denominator > 0) {
+                                                  percentage = Math.round((numerator / denominator) * 100 * 10) / 10;
+                                                }
+                                              }
+                                            } else {
+                                              // Direct percentage input
+                                              const num = parseFloat(input);
+                                              if (!isNaN(num) && num >= 0 && num <= 100) {
+                                                percentage = num;
+                                              }
+                                            }
+                                          }
+                                          
+                                          const updatedSubjects = [...exam.subjects];
+                                          updatedSubjects[subjectIdx] = { 
+                                            ...subject, 
+                                            marksInput: input,
+                                            marks: percentage 
+                                          };
+                                          updateExam(exam.id, { subjects: updatedSubjects });
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        placeholder="e.g., 45/50 or 90"
+                                        className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                                      />
+                                      {subject.marks != null && subject.marks >= 0 && (
+                                        <>
+                                          <span className="text-xs font-bold text-indigo-600">
+                                            = {subject.marks}%
+                                          </span>
+                                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                            subject.marks === 100 ? 'bg-green-100 text-green-700' :
+                                            subject.marks >= 95 ? 'bg-blue-100 text-blue-700' :
+                                            subject.marks >= 90 ? 'bg-purple-100 text-purple-700' :
+                                            'bg-gray-100 text-gray-600'
+                                          }`}>
+                                            {subject.marks === 100 ? '🎉 Perfect!' :
+                                             subject.marks >= 95 ? '⭐ Excellence!' :
+                                             subject.marks >= 90 ? '✨ Outstanding!' :
+                                             subject.marks >= 75 ? '👍 Good' :
+                                             subject.marks >= 60 ? '✓ Pass' : '📚 Keep Learning'}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                    {subject.marks != null && subject.marks >= 90 && (
+                                      <div className="text-xs text-green-600 mt-1 font-semibold">
+                                        🎁 Bonus: +{subject.marks === 100 ? '300' : subject.marks >= 95 ? '200' : '100'} pts!
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
 
                                 {/* Subject Progress */}
                                 {subjectProgress.total > 0 && (

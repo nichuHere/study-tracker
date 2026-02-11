@@ -142,7 +142,7 @@ export default function AuthPage({ onAuth }) {
                   },
                 },
               }}
-              redirectTo={window.location.origin}
+              redirectTo={process.env.REACT_APP_REDIRECT_URL || window.location.origin}
               magicLink={false}
               socialLayout="horizontal"
               showLinks={false}

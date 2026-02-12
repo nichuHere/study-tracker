@@ -120,7 +120,7 @@ const Auth = () => {
                 </div>
               </div>
               <div>
-                <h1 className="text-5xl font-bold drop-shadow-lg">Kannama</h1>
+                <h1 className="text-5xl font-semibold drop-shadow-lg">Kannama</h1>
                 <h2 className="text-3xl font-light opacity-90">Study Tracker</h2>
               </div>
             </div>
@@ -182,7 +182,7 @@ const Auth = () => {
                   </div>
                 </div>
                 <div className="text-left">
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
+                  <h1 className="text-3xl font-semibold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
                     Kannama
                   </h1>
                   <p className="text-base text-gray-600 font-medium">Study Tracker</p>
@@ -191,7 +191,7 @@ const Auth = () => {
             </div>
 
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+              <h2 className="text-2xl font-semibold text-gray-500 mb-2">
                 {isSignUp ? '🎓 Create Account' : '👋 Welcome Back'}
               </h2>
               <p className="text-gray-600">
@@ -219,7 +219,7 @@ const Auth = () => {
             <form onSubmit={handleAuth} className="space-y-4">
               {isSignUp && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-500 mb-2">
                     Full Name
                   </label>
                   <div className="relative">
@@ -237,7 +237,7 @@ const Auth = () => {
               )}
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-500 mb-2">
                   Email Address
                 </label>
                 <div className="relative">
@@ -254,7 +254,7 @@ const Auth = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-500 mb-2">
                   Password
                 </label>
                 <div className="relative">
@@ -272,7 +272,7 @@ const Auth = () => {
 
               {isSignUp && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-500 mb-2">
                     Confirm Password
                   </label>
                   <div className="relative">
@@ -298,7 +298,7 @@ const Auth = () => {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                     />
-                    <span className="ml-2 text-sm text-gray-700 font-medium">Remember me</span>
+                    <span className="ml-2 text-sm text-gray-500 font-medium">Remember me</span>
                   </label>
                   <button
                     type="button"
@@ -313,7 +313,7 @@ const Auth = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white py-3.5 rounded-xl font-bold text-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white py-3.5 rounded-xl font-semibold text-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -338,7 +338,7 @@ const Auth = () => {
                     setIsSignUp(!isSignUp);
                     setMessage({ type: '', text: '' });
                   }}
-                  className="ml-2 text-indigo-600 font-bold hover:text-indigo-700 hover:underline"
+                  className="ml-2 text-indigo-600 font-semibold hover:text-indigo-700 hover:underline"
                 >
                   {isSignUp ? 'Log In' : 'Sign Up'}
                 </button>

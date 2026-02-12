@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { 
-  Clock, Target, TrendingUp, Zap, Info, X, Flame
+  Clock, Target, TrendingUp, Zap, Info, X, Flame, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { getTodayDateIST, calculatePoints, calculateStreak } from '../utils/helpers';
 import BadgeIcon from './BadgeIcon';
@@ -99,6 +99,7 @@ const Dashboard = ({
 }) => {
   const [showPointsInfo, setShowPointsInfo] = useState(false);
   const [showBadgeInfo, setShowBadgeInfo] = useState(false);
+  const [showSubjectInsights, setShowSubjectInsights] = useState(true);
   
   // Calculate current streak
   const currentStreak = useMemo(() => calculateStreak(tasks), [tasks]);
@@ -124,6 +125,7 @@ const Dashboard = ({
       
       const dayTasks = tasks.filter(t => t.date === dateStr);
       const completedTasks = dayTasks.filter(t => t.completed);
+      const completedTime = completedTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
       
       calendar.push({
         date: dateStr,
@@ -131,6 +133,7 @@ const Dashboard = ({
         dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
         hasActivity: completedTasks.length > 0,
         taskCount: completedTasks.length,
+        completedTime,
         isToday: dateStr === getTodayDateIST()
       });
     }
@@ -192,6 +195,62 @@ const Dashboard = ({
     }));
   }, [stats, subjects.length]);
 
+  // Get subject-wise analytics
+  const subjectAnalytics = useMemo(() => {
+    const subjectData = {};
+
+    subjects.forEach(subject => {
+      const subjectTasks = tasks.filter(t => t.subject === subject.name);
+      const completedTasks = subjectTasks.filter(t => t.completed);
+      const totalTime = completedTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
+      
+      // Last 7 days activity
+      const recentTasks = subjectTasks.filter(t => {
+        const taskDate = new Date(t.date);
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return taskDate >= weekAgo;
+      });
+
+      subjectData[subject.name] = {
+        name: subject.name,
+        totalTasks: subjectTasks.length,
+        completedTasks: completedTasks.length,
+        totalTime,
+        recentActivity: recentTasks.length,
+        completionRate: subjectTasks.length > 0 
+          ? Math.round((completedTasks.length / subjectTasks.length) * 100) 
+          : 0
+      };
+    });
+
+    return Object.values(subjectData);
+  }, [tasks, subjects]);
+
+  // Get most active subjects (last 7 days) - show all
+  const mostActiveSubjects = useMemo(() => {
+    return subjectAnalytics
+      .filter(s => s.recentActivity > 0)
+      .sort((a, b) => b.recentActivity - a.recentActivity);
+  }, [subjectAnalytics]);
+
+  // Get neglected subjects (no activity in last 3 days or never studied) - show all
+  const neglectedSubjects = useMemo(() => {
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    
+    return subjectAnalytics.filter(subject => {
+      // Include subjects never studied
+      if (subject.totalTasks === 0) return true;
+      // Include subjects with no recent activity
+      const recentTasks = tasks.filter(t => 
+        t.subject === subject.name && 
+        new Date(t.date) >= threeDaysAgo
+      );
+      return recentTasks.length === 0;
+    });
+  }, [tasks, subjectAnalytics]);
+
   // Calculate leaderboard with real points
   const leaderboard = useMemo(() => {
     return profiles.map(profile => {
@@ -244,7 +303,7 @@ const Dashboard = ({
         
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+          <h1 className="text-3xl font-semibold text-gray-500 mb-2">
             Dashboard
           </h1>
           <p className="text-gray-600">
@@ -264,9 +323,9 @@ const Dashboard = ({
               <div className="bg-pastel-blue-light rounded-2xl p-6 shadow-soft hover:shadow-card transition-shadow">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-600">Completed</span>
-                  <CheckCircleIcon className="w-5 h-5 text-gray-700" />
+                  <CheckCircleIcon className="w-5 h-5 text-gray-500" />
                 </div>
-                <div className="text-4xl font-bold text-gray-800">
+                <div className="text-4xl font-semibold text-gray-500">
                   {stats.completionRate}%
                 </div>
                 <p className="text-xs text-gray-600 mt-1">
@@ -278,9 +337,9 @@ const Dashboard = ({
               <div className="bg-pastel-purple-light rounded-2xl p-6 shadow-soft hover:shadow-card transition-shadow">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-600">Today</span>
-                  <Clock className="w-5 h-5 text-gray-700" />
+                  <Clock className="w-5 h-5 text-gray-500" />
                 </div>
-                <div className="text-4xl font-bold text-gray-800">
+                <div className="text-4xl font-semibold text-gray-500">
                   {Math.floor(stats.studyMinutesToday / 60)}<span className="text-2xl">.{Math.floor((stats.studyMinutesToday % 60) / 6)}</span>
                 </div>
                 <p className="text-xs text-gray-600 mt-1">
@@ -292,9 +351,9 @@ const Dashboard = ({
               <div className="bg-pastel-pink-light rounded-2xl p-6 shadow-soft hover:shadow-card transition-shadow">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-600">This Week</span>
-                  <TrendingUp className="w-5 h-5 text-gray-700" />
+                  <TrendingUp className="w-5 h-5 text-gray-500" />
                 </div>
-                <div className="text-4xl font-bold text-gray-800">
+                <div className="text-4xl font-semibold text-gray-500">
                   {Math.floor(stats.studyMinutesWeek / 60)}<span className="text-2xl">h</span>
                 </div>
                 <p className="text-xs text-gray-600 mt-1">
@@ -303,10 +362,10 @@ const Dashboard = ({
               </div>
             </div>
 
-            {/* Study Streak Section - Duolingo Style */}
+            {/* Study Streak Section - Enhanced with Activity */}
             <div className="bg-white rounded-2xl p-6 shadow-card">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-gray-800">Study Streak</h2>
+                <h2 className="text-lg font-semibold text-gray-500">Study Streak</h2>
                 <Flame className="w-5 h-5 text-orange-500" />
               </div>
               
@@ -319,7 +378,7 @@ const Dashboard = ({
                   </div>
                 </div>
                 <div className="ml-6">
-                  <div className="text-6xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
+                  <div className="text-6xl font-semibold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
                     {currentStreak}
                   </div>
                   <div className="text-sm font-semibold text-gray-600 mt-1">
@@ -351,35 +410,53 @@ const Dashboard = ({
                   </p>
                 )}
                 {currentStreak >= 30 && (
-                  <p className="text-sm bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent font-bold">
+                  <p className="text-sm bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent font-semibold">
                     👑 You're a Study Champion! Keep this legendary streak alive!
                   </p>
                 )}
               </div>
               
-              {/* Calendar Heatmap - Current Week (Mon-Sun) */}
+              {/* Enhanced Calendar - Current Week with Activity */}
               <div className="mb-4">
-                <div className="text-xs font-semibold text-gray-600 mb-3">This Week</div>
+                <div className="text-xs font-semibold text-gray-600 mb-3">This Week's Activity</div>
                 <div className="grid grid-cols-7 gap-2">
                   {streakCalendar.map((day, idx) => (
-                    <div key={idx} className="flex flex-col items-center">
-                      <div className="text-xs text-gray-500 mb-1">{day.dayName[0]}</div>
+                    <div key={idx} className="flex flex-col items-center gap-1">
+                      <div className="text-xs text-gray-500 font-medium">{day.dayName}</div>
                       <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
+                        className={`w-12 h-12 rounded-lg flex items-center justify-center text-xs font-semibold transition-all hover:scale-105 ${
                           day.hasActivity
                             ? day.isToday
-                              ? 'bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-lg scale-110 ring-2 ring-orange-300'
-                              : 'bg-gradient-to-br from-orange-300 to-red-400 text-white shadow-md hover:scale-105'
+                              ? 'bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-lg ring-2 ring-orange-300'
+                              : 'bg-gradient-to-br from-orange-300 to-red-400 text-white shadow-md'
                             : day.isToday
-                            ? 'bg-gray-200 text-gray-400 ring-2 ring-gray-300'
-                            : 'bg-gray-100 text-gray-300'
+                            ? 'bg-gray-200 text-gray-500 ring-2 ring-gray-300'
+                            : 'bg-gray-100 text-gray-400'
                         }`}
-                        title={`${day.date}: ${day.taskCount} task${day.taskCount !== 1 ? 's' : ''} completed`}
+                        title={`${day.date}: ${day.completedTime}m study time, ${day.taskCount} task${day.taskCount !== 1 ? 's' : ''}`}
                       >
                         {day.isToday ? '•' : day.hasActivity ? '✓' : day.day}
                       </div>
                     </div>
                   ))}
+                </div>
+                
+                {/* Study Hours Below - Subtle */}
+                <div className="mt-2 grid grid-cols-7 gap-2">
+                  {streakCalendar.map((day, idx) => {
+                    const hours = day.completedTime / 60;
+                    return (
+                      <div key={idx} className="text-center">
+                        <div className="text-[10px] text-gray-400">
+                          {day.completedTime > 0 ? (
+                            hours >= 1 
+                              ? `${hours.toFixed(1)}h`
+                              : `${day.completedTime}m`
+                          ) : '—'}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               
@@ -400,14 +477,14 @@ const Dashboard = ({
                       }`}
                     >
                       <div className="text-xl mb-1">{milestone.emoji}</div>
-                      <div className={`text-xs font-bold ${
+                      <div className={`text-xs font-semibold ${
                         currentStreak >= milestone.days ? 'text-orange-600' : 'text-gray-500'
                       }`}>
                         {milestone.label}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">+{milestone.bonus}</div>
                       {currentStreak >= milestone.days && (
-                        <div className="text-xs text-green-600 font-bold mt-1">✓</div>
+                        <div className="text-xs text-green-600 font-semibold mt-1">✓</div>
                       )}
                     </div>
                   ))}
@@ -415,10 +492,74 @@ const Dashboard = ({
               </div>
             </div>
 
+            {/* Subject Insights - Compact */}
+            <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+              <div 
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => setShowSubjectInsights(!showSubjectInsights)}
+              >
+                <h2 className="text-lg font-semibold text-gray-500">Subject Insights</h2>
+                {showSubjectInsights ? 
+                  <ChevronUp className="w-5 h-5 text-gray-400" /> : 
+                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                }
+              </div>
+              
+              {showSubjectInsights && (
+                <div className="px-4 pb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Most Active Subjects */}
+                    <div>
+                      <h3 className="font-semibold text-gray-500 mb-3 flex items-center gap-2 text-sm">
+                        <Target className="w-4 h-4 text-green-600" />
+                        Most Active (Last 7 Days)
+                      </h3>
+                      {mostActiveSubjects.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No activity yet</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {mostActiveSubjects.map((subject, i) => (
+                            <div key={i} className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
+                              <span className="text-sm font-medium text-gray-500">{subject.name}</span>
+                              <span className="text-xs text-green-700 font-semibold">
+                                {subject.recentActivity} tasks
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Neglected Subjects */}
+                    <div>
+                      <h3 className="font-semibold text-gray-500 mb-3 flex items-center gap-2 text-sm">
+                        <AlertCircle className="w-4 h-4 text-rose-400" />
+                        Needs Attention
+                      </h3>
+                      {neglectedSubjects.length === 0 ? (
+                        <p className="text-gray-500 text-sm">All subjects active!</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {neglectedSubjects.map((subject, i) => (
+                            <div key={i} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
+                              <span className="text-sm font-medium text-gray-500">{subject.name}</span>
+                              <span className="text-xs text-rose-500 font-semibold">
+                                {subject.totalTasks === 0 ? 'Never studied' : 'No activity (3+ days)'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Today's Progress */}
             <div className="bg-white rounded-2xl p-6 shadow-card">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-800">Today's Progress</h2>
+                <h2 className="text-lg font-semibold text-gray-500">Today's Progress</h2>
                 <button className="text-sm text-accent-blue hover:underline">
                   View all
                 </button>
@@ -434,7 +575,7 @@ const Dashboard = ({
                       style={{ width: `${Math.min((stats.completedToday / Math.max(stats.totalToday, 1)) * 100, 100)}%` }}
                     />
                   </div>
-                  <span className="text-sm font-bold text-gray-800 w-16 text-right">
+                  <span className="text-sm font-semibold text-gray-500 w-16 text-right">
                     {stats.completedToday}/{stats.totalToday}
                   </span>
                 </div>
@@ -447,7 +588,7 @@ const Dashboard = ({
                       style={{ width: `${Math.min((stats.studyMinutesToday / 240) * 100, 100)}%` }}
                     />
                   </div>
-                  <span className="text-sm font-bold text-gray-800 w-16 text-right">
+                  <span className="text-sm font-semibold text-gray-500 w-16 text-right">
                     {stats.studyMinutesToday}m
                   </span>
                 </div>
@@ -460,7 +601,7 @@ const Dashboard = ({
                       style={{ width: `${Math.min((stats.studyMinutesWeek / 1260) * 100, 100)}%` }}
                     />
                   </div>
-                  <span className="text-sm font-bold text-gray-800 w-16 text-right">
+                  <span className="text-sm font-semibold text-gray-500 w-16 text-right">
                     {Math.floor(stats.studyMinutesWeek / 60)}h
                   </span>
                 </div>
@@ -471,7 +612,7 @@ const Dashboard = ({
             <div className="bg-white rounded-2xl p-6 shadow-card">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-gray-800">Badge Collection</h2>
+                  <h2 className="text-lg font-semibold text-gray-500">Badge Collection</h2>
                   <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-semibold">
                     {allBadgesWithStatus.filter(b => b.unlocked).length}/{allBadgesWithStatus.length}
                   </span>
@@ -494,57 +635,57 @@ const Dashboard = ({
                   >
                     <X className="w-4 h-4 text-gray-500" />
                   </button>
-                  <h3 className="font-bold text-gray-800 mb-3 text-sm flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-500 mb-3 text-sm flex items-center gap-2">
                     🏅 How Badges Work
                   </h3>
-                  <div className="space-y-3 text-xs text-gray-700">
+                  <div className="space-y-3 text-xs text-gray-500">
                     <div>
-                      <p className="font-semibold text-gray-800 mb-1">🎯 How to Unlock Badges:</p>
+                      <p className="font-semibold text-gray-500 mb-1">🎯 How to Unlock Badges:</p>
                       <p className="text-gray-600 leading-relaxed">
                         Complete tasks, study regularly, and reach milestones to unlock badges! Each badge has specific requirements - check what you need to do when hovering over locked badges.
                       </p>
                     </div>
                     
                     <div className="border-t border-purple-200 pt-2">
-                      <p className="font-semibold text-gray-800 mb-2">🌟 Badge Tiers & Rewards:</p>
+                      <p className="font-semibold text-gray-500 mb-2">🌟 Badge Tiers & Rewards:</p>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="bg-white rounded-lg p-2">
                           <div className="flex items-center gap-1 mb-1">
                             <div className="w-2 h-2 rounded-full bg-gray-500"></div>
-                            <span className="font-bold text-gray-700">Common</span>
+                            <span className="font-semibold text-gray-500">Common</span>
                           </div>
                           <p className="text-gray-600 text-[10px]">Easy to get</p>
-                          <p className="font-bold text-blue-600 text-xs">+50 points</p>
+                          <p className="font-semibold text-blue-600 text-xs">+50 points</p>
                         </div>
                         <div className="bg-white rounded-lg p-2">
                           <div className="flex items-center gap-1 mb-1">
                             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                            <span className="font-bold text-blue-700">Rare</span>
+                            <span className="font-semibold text-blue-700">Rare</span>
                           </div>
                           <p className="text-gray-600 text-[10px]">Takes effort</p>
-                          <p className="font-bold text-blue-600 text-xs">+100 points</p>
+                          <p className="font-semibold text-blue-600 text-xs">+100 points</p>
                         </div>
                         <div className="bg-white rounded-lg p-2">
                           <div className="flex items-center gap-1 mb-1">
                             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                            <span className="font-bold text-purple-700">Epic</span>
+                            <span className="font-semibold text-purple-700">Epic</span>
                           </div>
                           <p className="text-gray-600 text-[10px]">Challenging!</p>
-                          <p className="font-bold text-purple-600 text-xs">+200 points</p>
+                          <p className="font-semibold text-purple-600 text-xs">+200 points</p>
                         </div>
                         <div className="bg-white rounded-lg p-2">
                           <div className="flex items-center gap-1 mb-1">
                             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                            <span className="font-bold text-orange-700">Legendary</span>
+                            <span className="font-semibold text-orange-700">Legendary</span>
                           </div>
                           <p className="text-gray-600 text-[10px]">Super hard!</p>
-                          <p className="font-bold text-orange-600 text-xs">+500 points</p>
+                          <p className="font-semibold text-orange-600 text-xs">+500 points</p>
                         </div>
                       </div>
                     </div>
                     
                     <div className="border-t border-purple-200 pt-2">
-                      <p className="font-semibold text-gray-800 mb-1">💡 Pro Tips:</p>
+                      <p className="font-semibold text-gray-500 mb-1">💡 Pro Tips:</p>
                       <ul className="space-y-1 text-gray-600 text-[11px] list-disc list-inside">
                         <li>Start with <strong>Common</strong> badges - they're easier to unlock!</li>
                         <li>Focus on <strong>Daily</strong> badges first for quick wins</li>
@@ -554,7 +695,7 @@ const Dashboard = ({
                     </div>
                     
                     <div className="bg-gradient-to-r from-yellow-100 to-orange-100 rounded-lg p-2 mt-2">
-                      <p className="font-bold text-orange-800 text-xs mb-1">✨ Why Collect Badges?</p>
+                      <p className="font-semibold text-orange-800 text-xs mb-1">✨ Why Collect Badges?</p>
                       <p className="text-orange-700 text-[10px]">
                         Badges boost your leaderboard score and show off your study achievements. Higher tier badges = more points = higher rank!
                       </p>
@@ -585,7 +726,7 @@ const Dashboard = ({
                       title={badge.unlocked ? badge.description : badge.requirement}
                     >
                       {/* Tier Badge */}
-                      <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-10 ${tier.color} text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase shadow-sm`}>
+                      <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-10 ${tier.color} text-white text-[8px] font-semibold px-2 py-0.5 rounded-full uppercase shadow-sm`}>
                         {tier.label}
                       </div>
                       
@@ -601,8 +742,8 @@ const Dashboard = ({
                         />
                       </div>
                       
-                      <div className={`text-[10px] font-bold mb-0.5 ${
-                        badge.unlocked ? 'text-gray-800' : 'text-gray-500'
+                      <div className={`text-[10px] font-semibold mb-0.5 ${
+                        badge.unlocked ? 'text-gray-500' : 'text-gray-500'
                       }`}>
                         {badge.name}
                       </div>
@@ -618,7 +759,7 @@ const Dashboard = ({
               
               {/* Tier Legend */}
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-xs font-semibold text-gray-700 mb-2">Badge Tiers:</div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">Badge Tiers:</div>
                 <div className="flex flex-wrap gap-3 text-xs">
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-gray-500"></div>
@@ -645,7 +786,7 @@ const Dashboard = ({
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-card sticky top-6 z-10">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-800">Leaderboard</h2>
+                <h2 className="text-lg font-semibold text-gray-500">Leaderboard</h2>
                 <button
                   onClick={() => setShowPointsInfo(!showPointsInfo)}
                   className="p-1 hover:bg-gray-100 rounded-full transition-colors"
@@ -655,111 +796,122 @@ const Dashboard = ({
                 </button>
               </div>
               
-              {/* Points Info Tooltip */}
+              {/* Points Info Tooltip - Compact */}
               {showPointsInfo && (
-                <div className="mb-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-4 border-2 border-blue-200 relative">
+                <div className="mb-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-3 border-2 border-blue-200 relative max-h-96 overflow-y-auto">
                   <button
                     onClick={() => setShowPointsInfo(false)}
-                    className="absolute top-2 right-2 p-1 hover:bg-white rounded-full transition-colors"
+                    className="absolute top-2 right-2 p-1 hover:bg-white rounded-full transition-colors z-10"
                   >
-                    <X className="w-4 h-4 text-gray-500" />
+                    <X className="w-3 h-3 text-gray-500" />
                   </button>
-                  <h3 className="font-bold text-gray-800 mb-3 text-sm flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-yellow-500" />
+                  <h3 className="font-semibold text-gray-500 mb-2 text-xs flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-yellow-500" />
                     How to Earn Points
                   </h3>
-                  <div className="space-y-2 text-xs text-gray-700">
-                    <div className="flex justify-between items-start">
-                      <span className="flex items-start gap-1">
-                        <span className="text-blue-600 font-bold">✓</span>
-                        <span>Complete a task</span>
-                      </span>
-                      <span className="font-bold text-blue-600">10 pts</span>
+                  <div className="space-y-1.5 text-xs text-gray-500">
+                    {/* Basic Points - 2 column */}
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 pb-1.5 border-b border-blue-200">
+                      <div className="flex justify-between items-center">
+                        <span className="flex items-center gap-1">
+                          <span className="text-blue-600">✓</span>
+                          <span className="text-[11px]">Task</span>
+                        </span>
+                        <span className="font-semibold text-blue-600 text-[11px]">10</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="flex items-center gap-1">
+                          <span className="text-purple-600">⏱</span>
+                          <span className="text-[11px]">Study</span>
+                        </span>
+                        <span className="font-semibold text-purple-600 text-[11px]">1/min</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-start">
-                      <span className="flex items-start gap-1">
-                        <span className="text-purple-600 font-bold">⏱</span>
-                        <span>Study time</span>
-                      </span>
-                      <span className="font-bold text-purple-600">1 pt/min</span>
-                    </div>
-                    <div className="border-t border-blue-200 my-2 pt-2">
-                      <div className="font-bold text-gray-800 mb-1">🏅 Badge Bonuses:</div>
-                      <div className="pl-4 space-y-1">
+                    
+                    {/* Badges - 2 column grid */}
+                    <div className="pt-1">
+                      <div className="font-semibold text-gray-500 mb-1 text-[11px]">🏅 Badges</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Common</span>
-                          <span className="font-bold">50 pts</span>
+                          <span className="font-semibold">50</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Rare</span>
-                          <span className="font-bold">100 pts</span>
+                          <span className="font-semibold">100</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Epic</span>
-                          <span className="font-bold">200 pts</span>
+                          <span className="font-semibold">200</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Legendary</span>
-                          <span className="font-bold text-orange-600">500 pts</span>
+                          <span className="font-semibold text-orange-600">500</span>
                         </div>
                       </div>
                     </div>
-                    <div className="border-t border-blue-200 my-2 pt-2">
-                      <div className="font-bold text-gray-800 mb-1">🔥 Streak Rewards:</div>
-                      <div className="pl-4 space-y-1">
+                    
+                    {/* Streaks - 2 column grid */}
+                    <div className="pt-1.5 border-t border-blue-200">
+                      <div className="font-semibold text-gray-500 mb-1 text-[11px]">🔥 Streaks</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Daily streak</span>
-                          <span className="font-bold">25 pts/day</span>
+                          <span className="text-gray-600">Daily</span>
+                          <span className="font-semibold">25/day</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">7-day bonus</span>
-                          <span className="font-bold text-orange-600">+200 pts</span>
+                          <span className="text-gray-600">7-day</span>
+                          <span className="font-semibold text-orange-600">+200</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">14-day bonus</span>
-                          <span className="font-bold text-orange-600">+400 pts</span>
+                          <span className="text-gray-600">14-day</span>
+                          <span className="font-semibold text-orange-600">+400</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">30-day bonus</span>
-                          <span className="font-bold text-orange-600">+1000 pts</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="border-t border-blue-200 my-2 pt-2">
-                      <div className="font-bold text-gray-800 mb-1">📊 Completion Milestones:</div>
-                      <div className="pl-4 space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">50% complete</span>
-                          <span className="font-bold">50 pts</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">75% complete</span>
-                          <span className="font-bold">100 pts</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">90% complete</span>
-                          <span className="font-bold">200 pts</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">100% complete</span>
-                          <span className="font-bold text-green-600">500 pts</span>
+                          <span className="text-gray-600">30-day</span>
+                          <span className="font-semibold text-orange-600">+1000</span>
                         </div>
                       </div>
                     </div>
-                    <div className="border-t border-blue-200 my-2 pt-2">
-                      <div className="font-bold text-gray-800 mb-1">🎯 Exam Score Bonuses:</div>
-                      <div className="pl-4 space-y-1">
+                    
+                    {/* Completion - 2 column grid */}
+                    <div className="pt-1.5 border-t border-blue-200">
+                      <div className="font-semibold text-gray-500 mb-1 text-[11px]">📊 Completion</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">&gt;90% score</span>
-                          <span className="font-bold">100 pts</span>
+                          <span className="text-gray-600">50%</span>
+                          <span className="font-semibold">50</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">&gt;95% score</span>
-                          <span className="font-bold text-orange-600">200 pts</span>
+                          <span className="text-gray-600">75%</span>
+                          <span className="font-semibold">100</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">100% score</span>
-                          <span className="font-bold text-green-600">300 pts</span>
+                          <span className="text-gray-600">90%</span>
+                          <span className="font-semibold">200</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">100%</span>
+                          <span className="font-semibold text-green-600">500</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Exam Scores - 1 column (fewer items) */}
+                    <div className="pt-1.5 border-t border-blue-200">
+                      <div className="font-semibold text-gray-500 mb-1 text-[11px]">🎯 Exam Scores</div>
+                      <div className="space-y-0.5 text-[10px]">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">&gt;90%</span>
+                          <span className="font-semibold">100 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">&gt;95%</span>
+                          <span className="font-semibold text-orange-600">200 pts</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">100%</span>
+                          <span className="font-semibold text-green-600">300 pts</span>
                         </div>
                       </div>
                     </div>
@@ -784,14 +936,14 @@ const Dashboard = ({
                       key={profile.id}
                       className={`${bgColor} rounded-xl p-4 flex items-center gap-3 hover:scale-102 transition-transform`}
                     >
-                      <div className={`text-2xl font-bold ${rankColors[idx] || 'text-gray-400'} w-8`}>
+                      <div className={`text-2xl font-semibold ${rankColors[idx] || 'text-gray-400'} w-8`}>
                         #{idx + 1}
                       </div>
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-semibold">
                         {profile.name[0]}
                       </div>
                       <div className="flex-1">
-                        <div className="text-sm font-bold text-gray-800">
+                        <div className="text-sm font-semibold text-gray-500">
                           {profile.name}
                         </div>
                         <div className="text-xs text-gray-600">
@@ -801,7 +953,7 @@ const Dashboard = ({
                       <div className="text-right">
                         <div className="flex items-center gap-1 text-accent-blue">
                           <Zap className="w-4 h-4" />
-                          <span className="text-sm font-bold">{profile.points}</span>
+                          <span className="text-sm font-semibold">{profile.points}</span>
                         </div>
                       </div>
                     </div>
@@ -818,22 +970,22 @@ const Dashboard = ({
 
             {/* Quick Stats */}
             <div className="bg-gradient-to-br from-accent-purple to-accent-blue rounded-2xl p-6 shadow-card text-white">
-              <h3 className="font-bold mb-4 flex items-center gap-2">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
                 <Target className="w-5 h-5" />
                 Quick Stats
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm opacity-90">Upcoming Exams</span>
-                  <span className="font-bold text-lg">{stats.upcomingExams}</span>
+                  <span className="font-semibold text-lg">{stats.upcomingExams}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm opacity-90">Active Subjects</span>
-                  <span className="font-bold text-lg">{stats.totalSubjects}</span>
+                  <span className="font-semibold text-lg">{stats.totalSubjects}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm opacity-90">Today's Tasks</span>
-                  <span className="font-bold text-lg">{stats.totalToday}</span>
+                  <span className="font-semibold text-lg">{stats.totalToday}</span>
                 </div>
               </div>
             </div>

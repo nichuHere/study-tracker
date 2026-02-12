@@ -140,7 +140,7 @@ const SchoolDocuments = ({ profileId }) => {
       return (
         <div className="bg-gray-50 rounded-lg p-8 text-center">
           <FileText className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-700 mb-4">{doc.file_name}</p>
+          <p className="text-gray-500 mb-4">{doc.file_name}</p>
           <a
             href={doc.file_url}
             target="_blank"
@@ -163,7 +163,7 @@ const SchoolDocuments = ({ profileId }) => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Pin className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-xl font-bold text-gray-800">Class Timetable</h2>
+              <h2 className="text-xl font-semibold text-gray-500">Class Timetable</h2>
             </div>
             <button
               onClick={() => deleteDocument(timetable.id)}
@@ -203,7 +203,7 @@ const SchoolDocuments = ({ profileId }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-800">Upload Document</h2>
+              <h2 className="text-xl font-semibold text-gray-500">Upload Document</h2>
               <button
                 onClick={() => setShowUploadModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -214,7 +214,7 @@ const SchoolDocuments = ({ profileId }) => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   Document Type
                 </label>
                 <select
@@ -228,7 +228,7 @@ const SchoolDocuments = ({ profileId }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   Description (Optional)
                 </label>
                 <input
@@ -241,7 +241,7 @@ const SchoolDocuments = ({ profileId }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   Select File (PNG, JPG, or PDF - Max 5MB)
                 </label>
                 <input
@@ -269,7 +269,7 @@ const SchoolDocuments = ({ profileId }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-800">School Documents</h2>
+              <h2 className="text-xl font-semibold text-gray-500">School Documents</h2>
               <button
                 onClick={() => {
                   setShowDocumentsModal(false);
@@ -309,7 +309,7 @@ const SchoolDocuments = ({ profileId }) => {
                         <FileText className="w-5 h-5 text-red-600" />
                       )}
                       <div className="flex-1">
-                        <p className="font-medium text-gray-800">{doc.file_name}</p>
+                        <p className="font-medium text-gray-500">{doc.file_name}</p>
                         {doc.description && (
                           <p className="text-sm text-gray-500">{doc.description}</p>
                         )}

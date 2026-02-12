@@ -153,7 +153,7 @@ export const BadgeIconWithLabel = ({
         size={size}
       />
       <div className={isHorizontal ? 'flex flex-col' : 'text-center'}>
-        <span className="text-sm font-medium text-gray-800">
+        <span className="text-sm font-medium text-gray-500">
           {badgeConfig.name}
         </span>
         {showDescription && (

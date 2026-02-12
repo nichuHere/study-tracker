@@ -22,7 +22,7 @@ export default function AuthPage({ onAuth }) {
               <div className="bg-white/20 backdrop-blur-lg p-3 rounded-2xl animate-float">
                 <GraduationCap className="w-10 h-10 text-white" />
               </div>
-              <h1 className="text-5xl font-bold">Study Tracker</h1>
+              <h1 className="text-5xl font-semibold">Study Tracker</h1>
             </div>
             <p className="text-xl text-white/90 font-light">
               Your ultimate companion for academic success
@@ -78,7 +78,7 @@ export default function AuthPage({ onAuth }) {
                 <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl">
                   <GraduationCap className="w-8 h-8 text-white" />
                 </div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 className="text-3xl font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   Study Tracker
                 </h1>
               </div>
@@ -86,7 +86,7 @@ export default function AuthPage({ onAuth }) {
             </div>
 
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome Back!</h2>
+              <h2 className="text-2xl font-semibold text-gray-500 mb-2">Welcome Back!</h2>
               <p className="text-gray-600">Sign in to continue your learning journey</p>
             </div>
 
@@ -120,7 +120,7 @@ export default function AuthPage({ onAuth }) {
                 className: {
                   button: 'font-semibold py-3 transition-all hover:scale-[1.02]',
                   input: 'transition-all',
-                  label: 'font-medium text-gray-700',
+                  label: 'font-medium text-gray-500',
                 }
               }}
               providers={[]}

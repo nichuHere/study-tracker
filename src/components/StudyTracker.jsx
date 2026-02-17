@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Search, Home, GraduationCap, FolderOpen, LayoutDashboard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 import Dashboard from './Dashboard';
@@ -1581,21 +1581,100 @@ const StudyTrackerApp = ({ session }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4">
-      {_loading && (
-        <div className="fixed inset-0 flex items-center justify-center bg-white bg-opacity-70 z-50">
-          <div className="flex flex-col items-center">
-            <svg className="animate-spin h-12 w-12 text-indigo-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-            </svg>
-            <div className="text-indigo-500 font-semibold text-lg">Loading...</div>
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
+      {/* Top Navigation Bar - EduMaster style */}
+      <nav className="sticky top-0 z-40 bg-gradient-to-r from-amber-100/90 via-orange-100/90 to-rose-100/90 backdrop-blur-md border-b border-amber-200/50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
+            {/* Logo/Brand */}
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-rose-400 to-purple-500 p-2 rounded-xl shadow-lg">
+                <GraduationCap className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent hidden sm:block">
+                Kannama
+              </span>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex items-center gap-1 bg-white/60 rounded-full px-2 py-1.5 shadow-inner">
+              {[
+                { key: 'dashboard', label: 'Home', icon: Home },
+                { key: 'daily', label: 'Tasks', icon: CheckCircle },
+                { key: 'calendar', label: 'Schedule', icon: Calendar },
+                { key: 'exams', label: 'Exams', icon: FileText },
+                { key: 'subjects', label: 'Subjects', icon: Book },
+                { key: 'analytics', label: 'Analytics', icon: BarChart3 },
+                { key: 'docs', label: 'Docs', icon: FolderOpen },
+              ].map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveView(key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                    activeView === key
+                      ? 'bg-gradient-to-r from-rose-500 to-purple-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-white hover:text-rose-600'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden md:inline">{label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Right side - Search, Notifications, Profile */}
+            <div className="flex items-center gap-3">
+              {/* Search */}
+              <div className="hidden lg:flex items-center bg-white/70 rounded-full px-3 py-1.5 shadow-inner">
+                <Search className="w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="bg-transparent border-none outline-none text-sm ml-2 w-24 placeholder-gray-400"
+                />
+              </div>
+
+              {/* Notifications */}
+              <button className="relative p-2 bg-white/70 rounded-full hover:bg-white transition-colors shadow-sm">
+                <Bell className="w-5 h-5 text-gray-600" />
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">
+                  3
+                </span>
+              </button>
+
+              {/* Profile Dropdown */}
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="flex items-center gap-2 bg-white/70 rounded-full pl-1 pr-3 py-1 hover:bg-white transition-colors shadow-sm"
+              >
+                <div className="w-8 h-8 bg-gradient-to-br from-rose-400 to-purple-500 rounded-full flex items-center justify-center">
+                  <User className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm font-medium text-gray-700 hidden sm:block">
+                  {accountName || session?.user?.email?.split('@')[0] || 'Account'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </nav>
+
+      {/* Main Content Area */}
+      <div className="p-4">
+        {_loading && (
+          <div className="fixed inset-0 flex items-center justify-center bg-white bg-opacity-70 z-50">
+            <div className="flex flex-col items-center">
+              <svg className="animate-spin h-12 w-12 text-rose-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+              </svg>
+              <div className="text-rose-500 font-semibold text-lg">Loading...</div>
+            </div>
+          </div>
+        )}
       <div className={`max-w-4xl mx-auto${_loading ? ' opacity-30 pointer-events-none select-none' : ''}`}>
         {/* Profile Selector */}
-        {profiles.length === 0 ? (
+        {!_loading && profiles.length === 0 ? (
           <div className="bg-white rounded-lg shadow-lg p-8 mb-4 text-center">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Welcome to Kannama Study Tracker!</h2>
             <p className="text-gray-600 mb-6">Create a profile for your first child to get started</p>

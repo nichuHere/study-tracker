@@ -336,8 +336,25 @@ export const calculateStreak = (tasks) => {
   if (uniqueDates.length === 0) return 0;
   
   const today = getTodayDateIST();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  
   let streak = 0;
   let currentDate = new Date(today);
+  
+  // Check if most recent completed task is today or yesterday
+  // (Allow streak to continue if user hasn't completed anything today yet)
+  const mostRecentDate = uniqueDates[0];
+  if (mostRecentDate !== today && mostRecentDate !== yesterdayStr) {
+    // Streak is broken - last activity was more than 1 day ago
+    return 0;
+  }
+  
+  // If no task today, start counting from yesterday
+  if (mostRecentDate !== today) {
+    currentDate = yesterday;
+  }
   
   for (let i = 0; i < uniqueDates.length; i++) {
     const taskDate = uniqueDates[i];

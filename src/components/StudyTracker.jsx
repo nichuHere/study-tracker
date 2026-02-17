@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Search, Home, GraduationCap, FolderOpen } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Home, GraduationCap, FolderOpen } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 import Dashboard from './Dashboard';
@@ -90,6 +90,8 @@ const StudyTrackerApp = ({ session }) => {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddExam, setShowAddExam] = useState(false);
   const [showAddReminder, setShowAddReminder] = useState(false);
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [showActivitiesManager, setShowActivitiesManager] = useState(false);
   const [newActivityName, setNewActivityName] = useState('');
   const [editingActivity, setEditingActivity] = useState(null);
@@ -125,6 +127,7 @@ const StudyTrackerApp = ({ session }) => {
   const [examChapterInput, setExamChapterInput] = useState('');
   const [editingExam, setEditingExam] = useState(null);
   const [minimizedExams, setMinimizedExams] = useState({});
+  const [showPreviousExams, setShowPreviousExams] = useState(false);
   const [expandedReminders, setExpandedReminders] = useState({});
   const [viewingSubject, setViewingSubject] = useState(null);
   const [profileSwitched, setProfileSwitched] = useState(false);
@@ -308,7 +311,7 @@ const StudyTrackerApp = ({ session }) => {
     setViewingSubject(null);
     setMinimizedExams({});
     setActiveProfile(profile);
-    setActiveView('daily');
+    setActiveView('dashboard');
     
     // Show profile switch indicator
     setSwitchedProfileName(profile.name);
@@ -1230,6 +1233,27 @@ const StudyTrackerApp = ({ session }) => {
     });
   };
 
+  // Get past exams (all subjects have passed dates)
+  const getPastExams = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return exams.filter(exam => {
+      if (!exam.subjects || exam.subjects.length === 0) return false;
+      // Check if ALL subjects have past dates
+      return exam.subjects.every(s => {
+        const examDate = new Date(s.date);
+        examDate.setHours(0, 0, 0, 0);
+        return examDate < today;
+      });
+    }).sort((a, b) => {
+      // Sort by most recent first
+      const latestA = Math.max(...a.subjects.map(s => new Date(s.date)));
+      const latestB = Math.max(...b.subjects.map(s => new Date(s.date)));
+      return latestB - latestA;
+    });
+  };
+
   // Get all upcoming exam subjects (flattened for calendar view)
   const getUpcomingExamSubjects = () => {
     const today = new Date();
@@ -1305,7 +1329,7 @@ const StudyTrackerApp = ({ session }) => {
 
   // Legacy function for backward compatibility
   const _getSubjectProgressLegacy = () => {
-    return subjects.map(subject => {
+    return profileSubjects.map(subject => {
       const subjectTasks = tasks.filter(t => t.subject === subject.name);
       const completedTasks = subjectTasks.filter(t => t.completed).length;
       const totalTasks = subjectTasks.length;
@@ -1360,7 +1384,7 @@ const StudyTrackerApp = ({ session }) => {
     const _last7Days = getLastNDays(7);
     const subjectData = {};
 
-    subjects.forEach(subject => {
+    profileSubjects.forEach(subject => {
       const subjectTasks = tasks.filter(t => t.subject === subject.name);
       const completedTasks = subjectTasks.filter(t => t.completed);
       const totalTime = completedTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
@@ -1393,7 +1417,7 @@ const StudyTrackerApp = ({ session }) => {
     const threeDaysAgo = new Date();
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     
-    return subjects.filter(subject => {
+    return profileSubjects.filter(subject => {
       const recentTasks = tasks.filter(t => 
         t.subject === subject.name && 
         new Date(t.date) >= threeDaysAgo
@@ -1542,7 +1566,7 @@ const StudyTrackerApp = ({ session }) => {
 
     // Get subject-wise performance across exams
     const subjectPerformance = {};
-    subjects.forEach(subject => {
+    profileSubjects.forEach(subject => {
       const subjectMarks = [];
       examsWithMarks.forEach(exam => {
         const subjectData = exam.subjects.find(s => s.subject === subject.name);
@@ -1586,7 +1610,7 @@ const StudyTrackerApp = ({ session }) => {
       <nav className="sticky top-0 z-40 bg-gradient-to-r from-amber-100/90 via-orange-100/90 to-rose-100/90 backdrop-blur-md border-b border-amber-200/50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
-            {/* Logo/Brand */}
+            {/* Logo & Profile Switcher */}
             <div className="flex items-center gap-3">
               <div className="bg-gradient-to-br from-rose-400 to-purple-500 p-2 rounded-xl shadow-lg">
                 <GraduationCap className="w-6 h-6 text-white" />
@@ -1594,6 +1618,82 @@ const StudyTrackerApp = ({ session }) => {
               <span className="text-xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent hidden sm:block">
                 Kannama
               </span>
+              {/* Child Selector Dropdown */}
+              {activeProfile && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSidebar(!showSidebar)}
+                    className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-3 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all hover:scale-105"
+                  >
+                    <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium text-sm">Studying: {activeProfile.name}</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* Rich Dropdown Menu */}
+                  {showSidebar && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowSidebar(false)} />
+                      <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-amber-200 z-50 overflow-hidden">
+                        <div className="p-3 bg-gradient-to-r from-amber-50 to-rose-50 border-b border-amber-100">
+                          <h3 className="font-semibold text-gray-800 text-sm">Switch Child</h3>
+                        </div>
+                        <div className="p-2 max-h-80 overflow-y-auto">
+                          {profiles.map(profile => (
+                            <button
+                              key={profile.id}
+                              onClick={() => {
+                                switchProfile(profile);
+                                setShowSidebar(false);
+                              }}
+                              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all mb-1 ${
+                                activeProfile?.id === profile.id
+                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-md'
+                                  : 'hover:bg-amber-50'
+                              }`}
+                            >
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
+                                activeProfile?.id === profile.id
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-gradient-to-br from-rose-400 to-purple-500 text-white'
+                              }`}>
+                                {profile.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="text-left flex-1">
+                                <div className="font-semibold">{profile.name}</div>
+                                <div className={`text-xs ${activeProfile?.id === profile.id ? 'text-white/80' : 'text-gray-500'}`}>{profile.class}</div>
+                              </div>
+                              {activeProfile?.id === profile.id && (
+                                <Check className="w-5 h-5" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        
+                        {/* Add Child Button */}
+                        {profiles.length < 5 && (
+                          <div className="p-2 border-t border-amber-100">
+                            <button
+                              onClick={() => {
+                                setShowSidebar(false);
+                                setShowAddProfile(true);
+                              }}
+                              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-amber-300 text-gray-500 hover:border-teal-400 hover:text-teal-600 transition-all"
+                            >
+                              <div className="w-10 h-10 rounded-full border-2 border-dashed border-current flex items-center justify-center">
+                                <Plus className="w-5 h-5" />
+                              </div>
+                              <span className="font-medium">Add Child</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Navigation Tabs */}
@@ -1622,25 +1722,142 @@ const StudyTrackerApp = ({ session }) => {
               ))}
             </div>
 
-            {/* Right side - Search, Notifications, Profile */}
+            {/* Right side - Notifications, Profile */}
             <div className="flex items-center gap-3">
-              {/* Search */}
-              <div className="hidden lg:flex items-center bg-white/70 rounded-full px-3 py-1.5 shadow-inner">
-                <Search className="w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="bg-transparent border-none outline-none text-sm ml-2 w-24 placeholder-gray-400"
-                />
-              </div>
-
               {/* Notifications */}
-              <button className="relative p-2 bg-white/70 rounded-full hover:bg-white transition-colors shadow-sm">
-                <Bell className="w-5 h-5 text-gray-600" />
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">
-                  3
-                </span>
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
+                  className="relative p-2 bg-white/70 rounded-full hover:bg-white transition-colors shadow-sm"
+                >
+                  <Bell className="w-5 h-5 text-gray-600" />
+                  {(getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
+                    getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
+                    getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length) > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">
+                      {getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
+                       getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
+                       getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown */}
+                {showNotificationsDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowNotificationsDropdown(false)} />
+                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 max-h-[70vh] overflow-hidden">
+                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <Bell className="w-5 h-5 text-orange-600" />
+                          <h3 className="font-semibold text-gray-900">Notifications</h3>
+                        </div>
+                        <button
+                          onClick={() => setShowNotificationsDropdown(false)}
+                          className="p-1 hover:bg-white rounded-full transition-colors"
+                        >
+                          <X className="w-4 h-4 text-gray-500" />
+                        </button>
+                      </div>
+                      
+                      <div className="overflow-y-auto max-h-[calc(70vh-60px)] p-3 space-y-2">
+                        {/* Today's Reminders */}
+                        {getTodaysReminders()
+                          .filter(reminder => !isNotificationDismissed(reminder.id, 'reminder'))
+                          .map((reminder) => (
+                          <div key={reminder.id} className="flex items-start gap-2 p-3 bg-amber-50 border-l-3 border-amber-400 rounded-lg group">
+                            <Clock className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="px-1.5 py-0.5 bg-amber-200 text-amber-700 text-[10px] font-semibold rounded uppercase">Reminder</span>
+                                <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
+                              </div>
+                              {reminder.description && (
+                                <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{reminder.description}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'reminder');}}
+                              className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Recurring Reminders */}
+                        {getTodaysRecurringReminders()
+                          .filter(reminder => !isNotificationDismissed(reminder.id, 'recurring'))
+                          .map((reminder) => (
+                          <div key={reminder.id} className="flex items-start gap-2 p-3 bg-purple-50 border-l-3 border-purple-400 rounded-lg group">
+                            <Repeat className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
+                                <span className="text-xs text-gray-500">• {reminder.time}</span>
+                              </div>
+                              {reminder.description && (
+                                <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{reminder.description}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'recurring');}}
+                              className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Study Suggestions */}
+                        {getDailySuggestions()
+                          .filter((suggestion, i) => !isNotificationDismissed(i, 'suggestion'))
+                          .map((suggestion, i) => (
+                          <div 
+                            key={i} 
+                            className={`flex items-start gap-2 p-3 rounded-lg border-l-3 group ${
+                              suggestion.priority === 'high' 
+                                ? 'bg-rose-50 border-rose-400' 
+                                : 'bg-blue-50 border-blue-400'
+                            }`}
+                          >
+                            {suggestion.priority === 'high' ? (
+                              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                            ) : (
+                              <Book className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {suggestion.priority === 'high' && (
+                                  <span className="px-1.5 py-0.5 bg-rose-200 text-rose-700 text-[10px] font-semibold rounded uppercase">Urgent</span>
+                                )}
+                                <span className="font-medium text-sm text-gray-900">{suggestion.message}</span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{suggestion.details}</p>
+                            </div>
+                            <button
+                              onClick={() => dismissNotification(i, 'suggestion')}
+                              className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Empty State */}
+                        {(getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
+                          getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
+                          getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length) === 0 && (
+                          <div className="text-center py-8 text-gray-500">
+                            <Bell className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                            <p className="text-sm">No notifications</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* Profile Dropdown */}
               <button
@@ -1818,86 +2035,68 @@ const StudyTrackerApp = ({ session }) => {
               </div>
             )}
 
-            {/* Profile Selection Bar - Child Selector */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-4 mb-4 border border-amber-200">
-              <div className="flex items-center gap-2 mb-3">
-                <User className="w-4 h-4 text-rose-500" />
-                <span className="text-sm font-medium text-gray-600">Select Child</span>
-              </div>
-              <div className="flex items-center gap-3 overflow-x-auto pb-1">
-                {profiles.map(profile => (
-                  <button
-                    key={profile.id}
-                    onClick={() => switchProfile(profile)}
-                    className={`relative flex-shrink-0 px-5 py-2.5 rounded-full font-medium transition-all ${
-                      activeProfile?.id === profile.id
-                        ? 'bg-gradient-to-r from-rose-500 to-purple-500 text-white shadow-lg ring-2 ring-rose-300 ring-offset-2'
-                        : 'bg-amber-50 text-gray-600 hover:bg-amber-100 border border-amber-200'
-                    }`}
-                  >
-                    {activeProfile?.id === profile.id && profileSwitched && (
-                      <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
-                      </span>
-                    )}
-                    <div className="font-semibold text-sm">{profile.name}</div>
-                    <div className="text-xs opacity-80">{profile.class}</div>
-                  </button>
-                ))}
-                
-                {/* Add Profile Button */}
-                {profiles.length >= 5 ? (
-                  <div className="flex-shrink-0 px-4 py-2 border-2 border-dashed border-gray-200 rounded-full text-gray-400 text-xs">
-                    Max 5 kids
+            {/* Add Profile Modal */}
+            {showAddProfile && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="fixed inset-0 bg-black/30" onClick={() => {
+                  setShowAddProfile(false);
+                  setNewProfileName('');
+                  setNewProfileClass('');
+                }} />
+                <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-900">Add Child</h3>
+                    <button
+                      onClick={() => {
+                        setShowAddProfile(false);
+                        setNewProfileName('');
+                        setNewProfileClass('');
+                      }}
+                      className="p-1.5 hover:bg-gray-100 rounded-full"
+                    >
+                      <X className="w-5 h-5 text-gray-500" />
+                    </button>
                   </div>
-                ) : showAddProfile ? (
-                  <div className="flex-shrink-0 bg-amber-50 border-2 border-dashed border-amber-300 rounded-xl p-3 min-w-[200px]">
-                    <input
-                      type="text"
-                      placeholder="Name"
-                      value={newProfileName}
-                      onChange={(e) => setNewProfileName(e.target.value)}
-                      className="w-full p-2 mb-2 border border-amber-200 rounded-lg text-sm bg-white"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Class/Grade"
-                      value={newProfileClass}
-                      onChange={(e) => setNewProfileClass(e.target.value)}
-                      className="w-full p-2 mb-2 border border-amber-200 rounded-lg text-sm bg-white"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={addProfile}
-                        className="flex-1 bg-gradient-to-r from-rose-500 to-purple-500 text-white py-1.5 rounded-lg text-sm font-medium"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowAddProfile(false);
-                          setNewProfileName('');
-                          setNewProfileClass('');
-                        }}
-                        className="px-3 bg-gray-200 text-gray-600 py-1 rounded-lg text-sm"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                  <input
+                    type="text"
+                    placeholder="Child's name"
+                    value={newProfileName}
+                    onChange={(e) => setNewProfileName(e.target.value)}
+                    className="w-full p-3 mb-3 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none"
+                    autoFocus
+                  />
+                  <input
+                    type="text"
+                    placeholder="Class/Grade (e.g., Grade 5)"
+                    value={newProfileClass}
+                    onChange={(e) => setNewProfileClass(e.target.value)}
+                    className="w-full p-3 mb-4 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        addProfile();
+                        setShowAddProfile(false);
+                      }}
+                      disabled={!newProfileName.trim()}
+                      className="flex-1 bg-gradient-to-r from-rose-500 to-purple-500 text-white py-3 rounded-xl font-medium disabled:opacity-50"
+                    >
+                      Add Child
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddProfile(false);
+                        setNewProfileName('');
+                        setNewProfileClass('');
+                      }}
+                      className="px-4 bg-gray-100 text-gray-600 rounded-xl font-medium hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => setShowAddProfile(true)}
-                    className="flex-shrink-0 px-4 py-2 border-2 border-dashed border-amber-300 rounded-full text-gray-500 hover:border-rose-400 hover:text-rose-500 transition-all flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span className="text-xs font-medium">Add Child</span>
-                  </button>
-                )}
+                </div>
               </div>
-              
-            </div>
+            )}
 
             {/* Stats Header */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 mb-4 border border-amber-200">
@@ -1914,91 +2113,16 @@ const StudyTrackerApp = ({ session }) => {
                         {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
                     </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 rounded-full">
+                      <Clock className="w-4 h-4 text-rose-500" />
+                      <span className="text-sm font-medium text-rose-700">{getTodayStudyTime()}m studied</span>
+                    </div>
                     <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-100 rounded-full">
                       <Zap className="w-4 h-4 text-green-600" />
                       <span className="text-sm font-medium text-green-700">Active</span>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Stats Dashboard - EduMaster Style */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-              {/* Study Time Today */}
-              <div className="bg-gradient-to-br from-rose-50 to-pink-100 rounded-2xl shadow-lg p-4 border border-rose-200 flex flex-col items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center mb-2 shadow-lg">
-                  <Clock className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-xl font-bold text-rose-700">{getTodayStudyTime()}</div>
-                <div className="text-xs font-medium text-rose-600">mins today</div>
-              </div>
-
-              {/* Study Time This Week */}
-              <div className="bg-gradient-to-br from-amber-50 to-orange-100 rounded-2xl shadow-lg p-4 border border-amber-200 flex flex-col items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mb-2 shadow-lg">
-                  <Calendar className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-xl font-bold text-amber-700">
-                  {Math.round(getLastNDays(7).reduce((sum, day) => sum + day.completedTime, 0) / 60 * 10) / 10}
-                </div>
-                <div className="text-xs font-medium text-amber-600">hrs this week</div>
-              </div>
-
-              {/* Today's Tasks */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl shadow-lg p-4 border border-green-200 flex flex-col items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mb-2 shadow-lg">
-                  <CheckCircle className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-xl font-bold text-green-700">
-                  {getTodayTasks().filter(t => t.completed).length}/{getTodayTasks().length}
-                </div>
-                <div className="text-xs font-medium text-green-600">tasks today</div>
-              </div>
-
-              {/* Upcoming Exams */}
-              <div className="bg-gradient-to-br from-purple-50 to-violet-100 rounded-2xl shadow-lg p-4 border border-purple-200 flex flex-col items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-400 to-violet-500 flex items-center justify-center mb-2 shadow-lg">
-                  <FileText className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-xl font-bold text-purple-700">
-                  {exams.filter(e => {
-                    const examDate = new Date(e.date);
-                    const today = new Date();
-                    const weekFromNow = new Date();
-                    weekFromNow.setDate(weekFromNow.getDate() + 7);
-                    return examDate >= today && examDate <= weekFromNow;
-                  }).length}
-                </div>
-                <div className="text-xs font-medium text-purple-600">exams this week</div>
-              </div>
-
-              {/* Recent Badge */}
-              <div className="bg-gradient-to-br from-yellow-50 to-amber-100 rounded-2xl shadow-lg p-4 border border-yellow-200 flex flex-col items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center mb-2 shadow-lg">
-                  <Trophy className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-sm font-bold text-yellow-700">
-                  {getTodayStudyTime() >= 180 ? '🏆 Goal!' : getTodayStudyTime() >= 90 ? '⭐ Great!' : getTodayStudyTime() >= 30 ? '✨ Good' : '🎯 Start'}
-                </div>
-                <div className="text-xs font-medium text-yellow-600">today's badge</div>
-              </div>
-            </div>
-
-            {/* Study Time Progress Bar */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-4 mb-4 border border-amber-200">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-rose-500" />
-                  <span className="font-medium text-gray-700">Today's Study Time</span>
-                </div>
-                <span className="text-sm font-bold text-gray-600">{getTodayStudyTime()} / 180 mins</span>
-              </div>
-              <div className="h-3 bg-amber-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-rose-500 to-purple-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min((getTodayStudyTime() / 180) * 100, 100)}%` }}
-                />
               </div>
             </div>
           </>
@@ -2580,184 +2704,93 @@ const StudyTrackerApp = ({ session }) => {
         {activeView === 'daily' && (
           <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 -m-6 mt-0">
             <div className="max-w-7xl mx-auto space-y-6">
-            {/* Today's Overview Header */}
-            <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h1 className="text-3xl font-semibold mb-2 text-gray-900">Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {activeProfile?.name}! 👋</h1>
-                  <p className="text-gray-600 text-lg">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                </div>
-                <div className="bg-pastel-purple-light rounded-xl p-4 text-center shadow-soft">
-                  <div className="text-4xl font-semibold text-gray-500">{getTodayTasks().length}</div>
-                  <div className="text-sm text-gray-600">Tasks Today</div>
+            {/* Today's Overview Header - Clean Dashboard Style */}
+            <div className="bg-white rounded-2xl shadow-card p-6 border border-gray-100">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-gray-100 rounded-xl">
+                    <Clock className="w-6 h-6 text-gray-500" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-semibold text-gray-900">Today's Overview</h1>
+                    <p className="text-sm text-gray-500">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                  </div>
                 </div>
               </div>
               
-              {/* Quick Stats */}
-              <div className="grid grid-cols-3 gap-4 mt-6">
-                <div className="bg-pastel-blue-light rounded-xl p-4 text-center shadow-soft hover:shadow-card transition-shadow">
-                  <div className="text-2xl font-semibold text-gray-500">{getTodayTasks().filter(t => t.completed).length}/{getTodayTasks().length}</div>
-                  <div className="text-xs text-gray-600 font-medium">Completed</div>
+              {/* Stats with Circular Progress */}
+              <div className="flex flex-col sm:flex-row gap-6">
+                {/* Circular Progress - Tasks Completed */}
+                <div className="flex-shrink-0 flex flex-col items-center">
+                  <div className="relative w-28 h-28">
+                    <svg className="w-28 h-28 transform -rotate-90">
+                      <circle
+                        cx="56"
+                        cy="56"
+                        r="48"
+                        stroke="#e5e7eb"
+                        strokeWidth="8"
+                        fill="none"
+                      />
+                      <circle
+                        cx="56"
+                        cy="56"
+                        r="48"
+                        stroke="url(#completedGradient)"
+                        strokeWidth="8"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeDasharray={`${2 * Math.PI * 48}`}
+                        strokeDashoffset={`${2 * Math.PI * 48 * (1 - (getTodayTasks().filter(t => t.completed).length / Math.max(getTodayTasks().length, 1)))}`}
+                        className="transition-all duration-500 ease-out"
+                      />
+                      <defs>
+                        <linearGradient id="completedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#4ade80" />
+                          <stop offset="100%" stopColor="#22c55e" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-2xl font-bold text-gray-900">
+                        {getTodayTasks().filter(t => t.completed).length}
+                      </span>
+                      <span className="text-xs text-gray-500">of {getTodayTasks().length}</span>
+                    </div>
+                  </div>
+                  <span className="text-sm font-medium text-gray-600 mt-2">Tasks Done</span>
                 </div>
-                <div className="bg-pastel-yellow-light rounded-xl p-4 text-center shadow-soft hover:shadow-card transition-shadow">
-                  <div className="text-2xl font-semibold text-gray-500">{getTodaysReminders().length + getTodaysRecurringReminders().length}</div>
-                  <div className="text-xs text-gray-600 font-medium">Reminders</div>
-                </div>
-                <div className="bg-pastel-coral-light rounded-xl p-4 text-center shadow-soft hover:shadow-card transition-shadow">
-                  <div className="text-2xl font-semibold text-gray-500">{getDailySuggestions().filter(s => s.priority === 'high').length}</div>
-                  <div className="text-xs text-gray-600 font-medium">Urgent</div>
+
+                {/* Progress Bars */}
+                <div className="flex-1 space-y-4 justify-center flex flex-col">
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm font-medium text-gray-600 w-24">Study Time</div>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-purple-400 to-purple-500 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min((getTodayStudyTime() / 240) * 100, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-500 w-16 text-right">
+                      {getTodayStudyTime()}m
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm font-medium text-gray-600 w-24">Reminders</div>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-blue-400 to-indigo-500 h-full rounded-full transition-all"
+                        style={{ width: `${(getTodaysReminders().length + getTodaysRecurringReminders().length) > 0 ? 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-500 w-16 text-right">
+                      {getTodaysReminders().length + getTodaysRecurringReminders().length}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-
-            {/* Today's Notifications & Reminders */}
-            {(getDailySuggestions().length > 0 || getTodaysReminders().length > 0 || getTodaysRecurringReminders().length > 0) && (
-              <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden transition-all duration-300">
-                <div className="flex items-center justify-between p-4 bg-pastel-yellow-light border-b border-gray-100">
-                  <div className="flex items-center gap-2">
-                    <Bell className="w-5 h-5 text-orange-600" />
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-900">Today's Notifications</h2>
-                      {todayNotificationsMinimized && (
-                        <p className="text-xs text-gray-600">
-                          {getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
-                           getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
-                           getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length} active
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!todayNotificationsMinimized && (
-                      <span className="bg-pastel-coral text-orange-700 px-2.5 py-1 rounded-full text-xs font-semibold">
-                        {getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
-                         getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
-                         getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => setTodayNotificationsMinimized(!todayNotificationsMinimized)}
-                      className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
-                      title={todayNotificationsMinimized ? 'Expand notifications' : 'Minimize notifications'}
-                    >
-                      {todayNotificationsMinimized ? <ChevronDown className="w-4 h-4 text-orange-600" /> : <ChevronUp className="w-4 h-4 text-orange-600" />}
-                    </button>
-                  </div>
-                </div>
-                
-                <div 
-                  className="transition-all duration-500 ease-in-out"
-                  style={{ 
-                    maxHeight: todayNotificationsMinimized ? '0' : '2000px',
-                    opacity: todayNotificationsMinimized ? '0' : '1',
-                    overflow: todayNotificationsMinimized ? 'hidden' : 'visible'
-                  }}
-                >
-                  <div className="p-4">
-                
-                <div className="space-y-2">
-                  {/* Today's Reminders */}
-                  {getTodaysReminders()
-                    .filter(reminder => !isNotificationDismissed(reminder.id, 'reminder'))
-                    .map((reminder) => (
-                    <div key={reminder.id} className="flex items-center gap-2 p-3 bg-pastel-yellow-light border-l-3 border-pastel-orange rounded-lg hover:shadow-md transition-all group">
-                      <Clock className="w-4 h-4 text-orange-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 bg-pastel-orange text-orange-700 text-[10px] font-semibold rounded uppercase">Today</span>
-                          <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
-                        </div>
-                        {reminder.description && (
-                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{reminder.description}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'reminder');}}
-                        className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="Dismiss"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-
-                  {/* Today's Recurring Reminders */}
-                  {getTodaysRecurringReminders()
-                    .filter(reminder => !isNotificationDismissed(reminder.id, 'recurring'))
-                    .map((reminder) => (
-                    <div key={reminder.id} className="flex items-center gap-2 p-3 bg-pastel-purple-light border-l-3 border-pastel-purple rounded-lg hover:shadow-md transition-all group">
-                      <Repeat className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
-                          <span className="text-xs text-gray-500">• {reminder.time}</span>
-                        </div>
-                        {reminder.description && (
-                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{reminder.description}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'recurring');}}
-                        className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="Dismiss"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-
-                  {/* Study Suggestions */}
-                  {getDailySuggestions()
-                    .filter((suggestion, i) => !isNotificationDismissed(i, 'suggestion'))
-                    .map((suggestion, i) => (
-                    <div 
-                      key={i} 
-                      className={`flex items-center gap-2 p-3 rounded-lg border-l-3 hover:shadow-md transition-all group ${
-                        suggestion.priority === 'high' 
-                          ? 'bg-pastel-pink-light border-pastel-coral' 
-                          : 'bg-pastel-blue-light border-pastel-blue'
-                      }`}
-                    >
-                      {suggestion.priority === 'high' ? (
-                        <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                      ) : (
-                        <Book className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          {suggestion.priority === 'high' && (
-                            <span className="px-1.5 py-0.5 bg-pastel-coral text-red-700 text-[10px] font-semibold rounded uppercase">Urgent</span>
-                          )}
-                          <span className="font-medium text-sm text-gray-900">{suggestion.message}</span>
-                        </div>
-                        <p className="text-xs text-gray-600 mt-0.5">{suggestion.details}</p>
-                        {suggestion.chapters && suggestion.chapters.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {suggestion.chapters.slice(0, 3).map((ch, idx) => (
-                              <span key={idx} className="px-1.5 py-0.5 bg-white text-[10px] text-gray-600 rounded">
-                                {ch}
-                              </span>
-                            ))}
-                            {suggestion.chapters.length > 3 && (
-                              <span className="text-[10px] text-gray-500">+{suggestion.chapters.length - 3}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => dismissNotification(i, 'suggestion')}
-                        className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="Dismiss"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                </div>
-                </div>
-              </div>
-            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Today's Tasks */}
@@ -3667,7 +3700,7 @@ const StudyTrackerApp = ({ session }) => {
 
             {/* Pill Badge Display */}
             <div className="flex flex-wrap gap-3">
-              {subjects.map(subject => (
+              {profileSubjects.map(subject => (
                 <button
                   key={subject.id}
                   onClick={() => setViewingSubject(viewingSubject?.id === subject.id ? null : subject)}
@@ -3680,7 +3713,7 @@ const StudyTrackerApp = ({ session }) => {
                   </span>
                 </button>
               ))}
-              {subjects.length === 0 && (
+              {profileSubjects.length === 0 && (
                 <p className="text-gray-500 text-sm italic py-4">No subjects yet. Click "Add Subject" to get started!</p>
               )}
             </div>
@@ -4888,6 +4921,109 @@ const StudyTrackerApp = ({ session }) => {
                 </div>
               )}
             </div>
+
+            {/* Previous Exams Section */}
+            {getPastExams().length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                <button
+                  onClick={() => setShowPreviousExams(!showPreviousExams)}
+                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold text-gray-700">Previous Exams</h2>
+                    <span className="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                      {getPastExams().length}
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showPreviousExams ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showPreviousExams && (
+                  <div className="p-3 border-t border-gray-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {getPastExams().map(exam => {
+                        const subjectsWithMarks = exam.subjects?.filter(s => s.marks != null && s.marks >= 0) || [];
+                        const avgMarks = subjectsWithMarks.length > 0 
+                          ? Math.round(subjectsWithMarks.reduce((sum, s) => sum + s.marks, 0) / subjectsWithMarks.length * 10) / 10
+                          : null;
+                        
+                        return (
+                          <div key={exam.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                            {/* Exam Header */}
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-semibold text-gray-700 truncate flex-1">{exam.name}</h3>
+                              <div className="flex items-center gap-2">
+                                {avgMarks !== null && (
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                    avgMarks >= 90 ? 'bg-green-100 text-green-700' :
+                                    avgMarks >= 75 ? 'bg-blue-100 text-blue-700' :
+                                    avgMarks >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    Avg: {avgMarks}%
+                                  </span>
+                                )}
+                                <button
+                                  onClick={() => deleteExam(exam.id)}
+                                  className="text-red-400 hover:text-red-600"
+                                  title="Delete exam"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Subjects Table */}
+                            <div className="space-y-1">
+                              {exam.subjects && exam.subjects.map((subject, subjectIdx) => (
+                                <div key={subjectIdx} className="flex items-center gap-2 bg-white rounded px-2 py-1.5 border border-gray-100">
+                                  <span className="text-xs font-medium text-gray-700 flex-1 truncate">{subject.subject}</span>
+                                  <input
+                                    type="text"
+                                    value={subject.marksInput ?? ''}
+                                    onChange={(e) => {
+                                      const input = e.target.value.trim();
+                                      let percentage = null;
+                                      if (input) {
+                                        if (input.includes('/') || input.includes('\\')) {
+                                          const parts = input.replace(/\\/g, '/').split('/');
+                                          if (parts.length === 2) {
+                                            const num = parseFloat(parts[0]), den = parseFloat(parts[1]);
+                                            if (!isNaN(num) && !isNaN(den) && den > 0) percentage = Math.round((num / den) * 1000) / 10;
+                                          }
+                                        } else {
+                                          const num = parseFloat(input);
+                                          if (!isNaN(num) && num >= 0 && num <= 100) percentage = num;
+                                        }
+                                      }
+                                      const updatedSubjects = [...exam.subjects];
+                                      updatedSubjects[subjectIdx] = { ...subject, marksInput: input, marks: percentage };
+                                      updateExam(exam.id, { subjects: updatedSubjects });
+                                    }}
+                                    placeholder="marks"
+                                    className="w-16 px-1.5 py-0.5 text-xs border border-gray-200 rounded text-center focus:ring-1 focus:ring-blue-400"
+                                  />
+                                  {subject.marks != null && (
+                                    <span className={`text-xs font-semibold min-w-[40px] text-center ${
+                                      subject.marks >= 90 ? 'text-green-600' :
+                                      subject.marks >= 75 ? 'text-blue-600' :
+                                      subject.marks >= 60 ? 'text-yellow-600' :
+                                      'text-gray-500'
+                                    }`}>
+                                      {subject.marks}%
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

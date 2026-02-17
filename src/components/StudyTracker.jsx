@@ -135,7 +135,6 @@ const StudyTrackerApp = ({ session }) => {
   const [notificationsMinimized, setNotificationsMinimized] = useState(false);
   const [showTrackingModeNotification, setShowTrackingModeNotification] = useState(false);
   const [pendingTrackingModeProfile, setPendingTrackingModeProfile] = useState(null);
-  const [todayNotificationsMinimized, setTodayNotificationsMinimized] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState([]);
   const [showAllReminders, setShowAllReminders] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {

@@ -674,6 +674,16 @@ const StudyTrackerApp = ({ session }) => {
     ? subjects.filter(s => s.profile_id === activeProfile.id)
     : [];
 
+  // Filter tasks for active profile only
+  const profileTasks = activeProfile
+    ? tasks.filter(t => t.profile_id === activeProfile.id)
+    : [];
+
+  // Filter exams for active profile only
+  const profileExams = activeProfile
+    ? exams.filter(e => e.profile_id === activeProfile.id)
+    : [];
+
   const getProfileSubjectByName = (subjectName) => {
     if (!subjectName) return null;
     return profileSubjects.find(s => s.name === subjectName) || null;
@@ -1088,7 +1098,7 @@ const StudyTrackerApp = ({ session }) => {
   // Get today's tasks
   const getTodayTasks = () => {
     const today = getTodayDateIST();
-    return tasks.filter(t => t.date === today);
+    return profileTasks.filter(t => t.date === today);
   };
 
   // Get upcoming reminders
@@ -1216,7 +1226,7 @@ const StudyTrackerApp = ({ session }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    return exams.filter(exam => {
+    return profileExams.filter(exam => {
       if (!exam.subjects || exam.subjects.length === 0) return false;
       // Check if any subject has a future or today's date
       return exam.subjects.some(s => {
@@ -1237,7 +1247,7 @@ const StudyTrackerApp = ({ session }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    return exams.filter(exam => {
+    return profileExams.filter(exam => {
       if (!exam.subjects || exam.subjects.length === 0) return false;
       // Check if ALL subjects have past dates
       return exam.subjects.every(s => {
@@ -1259,7 +1269,7 @@ const StudyTrackerApp = ({ session }) => {
     today.setHours(0, 0, 0, 0);
     
     const upcomingSubjects = [];
-    exams.forEach(exam => {
+    profileExams.forEach(exam => {
       if (exam.subjects && exam.subjects.length > 0) {
         exam.subjects.forEach(subject => {
           const examDate = new Date(subject.date);
@@ -1329,7 +1339,7 @@ const StudyTrackerApp = ({ session }) => {
   // Legacy function for backward compatibility
   const _getSubjectProgressLegacy = () => {
     return profileSubjects.map(subject => {
-      const subjectTasks = tasks.filter(t => t.subject === subject.name);
+      const subjectTasks = profileTasks.filter(t => t.subject === subject.name);
       const completedTasks = subjectTasks.filter(t => t.completed).length;
       const totalTasks = subjectTasks.length;
       const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -1353,7 +1363,7 @@ const StudyTrackerApp = ({ session }) => {
 
   // Get tasks for a specific date
   const getTasksForDate = (dateString) => {
-    return tasks.filter(t => t.date === dateString);
+    return profileTasks.filter(t => t.date === dateString);
   };
 
   // Get last N days of data
@@ -1384,7 +1394,7 @@ const StudyTrackerApp = ({ session }) => {
     const subjectData = {};
 
     profileSubjects.forEach(subject => {
-      const subjectTasks = tasks.filter(t => t.subject === subject.name);
+      const subjectTasks = profileTasks.filter(t => t.subject === subject.name);
       const completedTasks = subjectTasks.filter(t => t.completed);
       const totalTime = completedTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
       
@@ -1417,7 +1427,7 @@ const StudyTrackerApp = ({ session }) => {
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     
     return profileSubjects.filter(subject => {
-      const recentTasks = tasks.filter(t => 
+      const recentTasks = profileTasks.filter(t => 
         t.subject === subject.name && 
         new Date(t.date) >= threeDaysAgo
       );
@@ -1440,7 +1450,7 @@ const StudyTrackerApp = ({ session }) => {
     const _today = new Date();
     
     // Check for urgent exams (within 5 days) with pending chapters
-    const urgentExams = exams.filter(exam => {
+    const urgentExams = profileExams.filter(exam => {
       // For new exam structure, check all subjects within the exam
       if (!exam.subjects || !Array.isArray(exam.subjects)) return false;
       
@@ -1485,7 +1495,7 @@ const StudyTrackerApp = ({ session }) => {
     const neglected = getNeglectedSubjects();
     neglected.slice(0, 2).forEach(subject => {
       // Check if there's an upcoming exam for this subject
-      const upcomingExam = exams.find(e => {
+      const upcomingExam = profileExams.find(e => {
         if (!e.subjects || !Array.isArray(e.subjects)) return false;
         return e.subjects.some(s => 
           s.subject === subject.name && 
@@ -1506,7 +1516,7 @@ const StudyTrackerApp = ({ session }) => {
     });
 
     // Suggest starting chapters marked as "started" but not completed
-    exams.forEach(exam => {
+    profileExams.forEach(exam => {
       if (!exam.subjects || !Array.isArray(exam.subjects)) return;
       
       exam.subjects.forEach(subject => {
@@ -3974,7 +3984,7 @@ const StudyTrackerApp = ({ session }) => {
             </div>
             
             {/* Add Exam Modal */}
-            {exams.length > 0 && (
+            {profileExams.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg shadow-lg p-4">
                   <div className="text-sm text-gray-600 mb-1">Total Exams</div>
@@ -3999,7 +4009,7 @@ const StudyTrackerApp = ({ session }) => {
             )}
 
             {/* Calendar View - 3 Column Card Layout */}
-            {exams.length > 0 && getUpcomingExamSubjects().length > 0 && (
+            {profileExams.length > 0 && getUpcomingExamSubjects().length > 0 && (
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-500 mb-4 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-indigo-600" />
@@ -5516,7 +5526,7 @@ const StudyTrackerApp = ({ session }) => {
                     const dayRecurringReminders = recurringReminders.filter(r => r.days && r.days.includes(dayOfWeek));
                     const dayExams = [];
                     
-                    exams.forEach(exam => {
+                    profileExams.forEach(exam => {
                       exam.subjects?.forEach(subject => {
                         if (subject.date === dateStr) {
                           dayExams.push({
@@ -5616,7 +5626,7 @@ const StudyTrackerApp = ({ session }) => {
               const dayRecurringReminders = recurringReminders.filter(r => r.days && r.days.includes(dayOfWeek));
               const dayExams = [];
               
-              exams.forEach(exam => {
+              profileExams.forEach(exam => {
                 exam.subjects?.forEach(subject => {
                   if (subject.date === selectedDate) {
                     dayExams.push({

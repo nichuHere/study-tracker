@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Search, Home, GraduationCap, FolderOpen, LayoutDashboard } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Search, Home, GraduationCap, FolderOpen } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 import Dashboard from './Dashboard';
@@ -1672,10 +1672,13 @@ const StudyTrackerApp = ({ session }) => {
             </div>
           </div>
         )}
-      <div className={`max-w-4xl mx-auto${_loading ? ' opacity-30 pointer-events-none select-none' : ''}`}>
+        <div className={`max-w-6xl mx-auto${_loading ? ' opacity-30 pointer-events-none select-none' : ''}`}>
         {/* Profile Selector */}
         {!_loading && profiles.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-4 text-center">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-8 mb-4 text-center border border-amber-200">
+            <div className="w-16 h-16 bg-gradient-to-br from-rose-400 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <GraduationCap className="w-8 h-8 text-white" />
+            </div>
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Welcome to Kannama Study Tracker!</h2>
             <p className="text-gray-600 mb-6">Create a profile for your first child to get started</p>
             
@@ -1685,18 +1688,18 @@ const StudyTrackerApp = ({ session }) => {
                 placeholder="Child's name"
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
-                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                className="w-full p-3 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none bg-white/70"
               />
               <input
                 type="text"
                 placeholder="Class/Grade (e.g., Grade 5)"
                 value={newProfileClass}
                 onChange={(e) => setNewProfileClass(e.target.value)}
-                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                className="w-full p-3 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none bg-white/70"
               />
               <button
                 onClick={addProfile}
-                className="w-full bg-indigo-400 text-white py-3 rounded-lg hover:bg-indigo-500 font-medium"
+                className="w-full bg-gradient-to-r from-rose-500 to-purple-500 text-white py-3 rounded-xl hover:from-rose-600 hover:to-purple-600 font-medium shadow-lg"
               >
                 Create Profile
               </button>
@@ -1706,7 +1709,7 @@ const StudyTrackerApp = ({ session }) => {
           <>
             {/* Profile Switch Indicator */}
             {profileSwitched && (
-              <div className="fixed top-24 right-6 z-50 animate-bounce">
+              <div className="fixed top-20 right-6 z-50 animate-bounce">
                 <div className="bg-gradient-to-r from-green-400 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 border-2 border-white">
                   <div className="bg-white/30 p-2 rounded-lg animate-pulse">
                     <User className="w-6 h-6 text-white" />
@@ -1815,17 +1818,21 @@ const StudyTrackerApp = ({ session }) => {
               </div>
             )}
 
-            {/* Profile Selection Bar */}
-            <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
-              <div className="flex items-center gap-3 overflow-x-auto">
+            {/* Profile Selection Bar - Child Selector */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-4 mb-4 border border-amber-200">
+              <div className="flex items-center gap-2 mb-3">
+                <User className="w-4 h-4 text-rose-500" />
+                <span className="text-sm font-medium text-gray-600">Select Child</span>
+              </div>
+              <div className="flex items-center gap-3 overflow-x-auto pb-1">
                 {profiles.map(profile => (
                   <button
                     key={profile.id}
                     onClick={() => switchProfile(profile)}
-                    className={`relative flex-shrink-0 px-6 py-3 rounded-lg font-medium transition-all ${
+                    className={`relative flex-shrink-0 px-5 py-2.5 rounded-full font-medium transition-all ${
                       activeProfile?.id === profile.id
-                        ? 'bg-gradient-to-r from-indigo-400 to-purple-400 text-white shadow-lg ring-2 ring-indigo-300 ring-offset-2'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        ? 'bg-gradient-to-r from-rose-500 to-purple-500 text-white shadow-lg ring-2 ring-rose-300 ring-offset-2'
+                        : 'bg-amber-50 text-gray-600 hover:bg-amber-100 border border-amber-200'
                     }`}
                   >
                     {activeProfile?.id === profile.id && profileSwitched && (
@@ -1834,36 +1841,36 @@ const StudyTrackerApp = ({ session }) => {
                         <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
                       </span>
                     )}
-                    <div className="font-semibold">{profile.name}</div>
-                    <div className="text-xs opacity-90">{profile.class}</div>
+                    <div className="font-semibold text-sm">{profile.name}</div>
+                    <div className="text-xs opacity-80">{profile.class}</div>
                   </button>
                 ))}
                 
                 {/* Add Profile Button */}
                 {profiles.length >= 5 ? (
-                  <div className="flex-shrink-0 px-6 py-3 border-2 border-gray-200 rounded-lg text-gray-400 bg-gray-50">
-                    <div className="text-xs text-center">Max 5 kids</div>
+                  <div className="flex-shrink-0 px-4 py-2 border-2 border-dashed border-gray-200 rounded-full text-gray-400 text-xs">
+                    Max 5 kids
                   </div>
                 ) : showAddProfile ? (
-                  <div className="flex-shrink-0 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-3 min-w-[200px]">
+                  <div className="flex-shrink-0 bg-amber-50 border-2 border-dashed border-amber-300 rounded-xl p-3 min-w-[200px]">
                     <input
                       type="text"
                       placeholder="Name"
                       value={newProfileName}
                       onChange={(e) => setNewProfileName(e.target.value)}
-                      className="w-full p-2 mb-2 border rounded text-sm"
+                      className="w-full p-2 mb-2 border border-amber-200 rounded-lg text-sm bg-white"
                     />
                     <input
                       type="text"
                       placeholder="Class/Grade"
                       value={newProfileClass}
                       onChange={(e) => setNewProfileClass(e.target.value)}
-                      className="w-full p-2 mb-2 border rounded text-sm"
+                      className="w-full p-2 mb-2 border border-amber-200 rounded-lg text-sm bg-white"
                     />
                     <div className="flex gap-2">
                       <button
                         onClick={addProfile}
-                        className="flex-1 bg-indigo-400 text-white py-1 rounded text-sm hover:bg-indigo-500"
+                        className="flex-1 bg-gradient-to-r from-rose-500 to-purple-500 text-white py-1.5 rounded-lg text-sm font-medium"
                       >
                         Add
                       </button>
@@ -1873,7 +1880,7 @@ const StudyTrackerApp = ({ session }) => {
                           setNewProfileName('');
                           setNewProfileClass('');
                         }}
-                        className="px-3 bg-gray-200 text-gray-600 py-1 rounded text-sm"
+                        className="px-3 bg-gray-200 text-gray-600 py-1 rounded-lg text-sm"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -1882,59 +1889,116 @@ const StudyTrackerApp = ({ session }) => {
                 ) : (
                   <button
                     onClick={() => setShowAddProfile(true)}
-                    className="flex-shrink-0 px-6 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-300 hover:text-indigo-500 transition-all"
+                    className="flex-shrink-0 px-4 py-2 border-2 border-dashed border-amber-300 rounded-full text-gray-500 hover:border-rose-400 hover:text-rose-500 transition-all flex items-center gap-2"
                   >
-                    <Plus className="w-5 h-5 mx-auto mb-1" />
-                    <div className="text-xs">Add Child</div>
+                    <Plus className="w-4 h-4" />
+                    <span className="text-xs font-medium">Add Child</span>
                   </button>
                 )}
               </div>
               
             </div>
 
-            {/* Header */}
-            <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-              <div className="flex items-center justify-between mb-4">
+            {/* Stats Header */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 mb-4 border border-amber-200">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* Left side - Title and date */}
                 <div className="flex flex-col">
-                  <h1 className="text-3xl font-semibold text-indigo-500">
+                  <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent">
                     {activeProfile?.name}'s Study Tracker
                   </h1>
-                  <div className="flex items-center gap-2 mt-1 px-3 py-1.5 bg-indigo-50 rounded-lg w-fit">
-                    <Calendar className="w-4 h-4 text-indigo-500" />
-                    <span className="text-sm font-medium text-indigo-600">
-                      {new Date().toLocaleDateString('en-US', { weekday: 'long' })}, {new Date().toLocaleDateString('en-US', { month: 'long' })} {new Date().getDate()}, {new Date().getFullYear()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowProfileModal(true)}
-                    className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-400 to-purple-400 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 shadow-md transition-all"
-                    title="View Profile Settings"
-                  >
-                    <div className="bg-white/20 backdrop-blur-sm rounded-full p-1">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <div className="flex flex-col items-start">
-                      <span className="text-xs opacity-80">Account</span>
-                      <span className="font-semibold text-sm leading-tight">
-                        {accountName || session?.user?.email?.split('@')[0] || 'Profile'}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 rounded-full">
+                      <Calendar className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-700">
+                        {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
                     </div>
-                  </button>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-100 rounded-full">
+                      <Zap className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">Active</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-sm text-gray-600">
-                <div className="flex items-center gap-1">
-                  <Clock className="w-4 h-4" />
-                  <span>Today: {getTodayStudyTime()} / 180 mins</span>
+            </div>
+
+            {/* Stats Dashboard - EduMaster Style */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+              {/* Study Time Today */}
+              <div className="bg-gradient-to-br from-rose-50 to-pink-100 rounded-2xl shadow-lg p-4 border border-rose-200 flex flex-col items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center mb-2 shadow-lg">
+                  <Clock className="w-6 h-6 text-white" />
                 </div>
-                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-indigo-400 h-2 rounded-full transition-all"
-                    style={{ width: `${Math.min((getTodayStudyTime() / 180) * 100, 100)}%` }}
-                  />
+                <div className="text-xl font-bold text-rose-700">{getTodayStudyTime()}</div>
+                <div className="text-xs font-medium text-rose-600">mins today</div>
+              </div>
+
+              {/* Study Time This Week */}
+              <div className="bg-gradient-to-br from-amber-50 to-orange-100 rounded-2xl shadow-lg p-4 border border-amber-200 flex flex-col items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mb-2 shadow-lg">
+                  <Calendar className="w-6 h-6 text-white" />
                 </div>
+                <div className="text-xl font-bold text-amber-700">
+                  {Math.round(getLastNDays(7).reduce((sum, day) => sum + day.completedTime, 0) / 60 * 10) / 10}
+                </div>
+                <div className="text-xs font-medium text-amber-600">hrs this week</div>
+              </div>
+
+              {/* Today's Tasks */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl shadow-lg p-4 border border-green-200 flex flex-col items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mb-2 shadow-lg">
+                  <CheckCircle className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-xl font-bold text-green-700">
+                  {getTodayTasks().filter(t => t.completed).length}/{getTodayTasks().length}
+                </div>
+                <div className="text-xs font-medium text-green-600">tasks today</div>
+              </div>
+
+              {/* Upcoming Exams */}
+              <div className="bg-gradient-to-br from-purple-50 to-violet-100 rounded-2xl shadow-lg p-4 border border-purple-200 flex flex-col items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-400 to-violet-500 flex items-center justify-center mb-2 shadow-lg">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-xl font-bold text-purple-700">
+                  {exams.filter(e => {
+                    const examDate = new Date(e.date);
+                    const today = new Date();
+                    const weekFromNow = new Date();
+                    weekFromNow.setDate(weekFromNow.getDate() + 7);
+                    return examDate >= today && examDate <= weekFromNow;
+                  }).length}
+                </div>
+                <div className="text-xs font-medium text-purple-600">exams this week</div>
+              </div>
+
+              {/* Recent Badge */}
+              <div className="bg-gradient-to-br from-yellow-50 to-amber-100 rounded-2xl shadow-lg p-4 border border-yellow-200 flex flex-col items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center mb-2 shadow-lg">
+                  <Trophy className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-sm font-bold text-yellow-700">
+                  {getTodayStudyTime() >= 180 ? '🏆 Goal!' : getTodayStudyTime() >= 90 ? '⭐ Great!' : getTodayStudyTime() >= 30 ? '✨ Good' : '🎯 Start'}
+                </div>
+                <div className="text-xs font-medium text-yellow-600">today's badge</div>
+              </div>
+            </div>
+
+            {/* Study Time Progress Bar */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-4 mb-4 border border-amber-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-rose-500" />
+                  <span className="font-medium text-gray-700">Today's Study Time</span>
+                </div>
+                <span className="text-sm font-bold text-gray-600">{getTodayStudyTime()} / 180 mins</span>
+              </div>
+              <div className="h-3 bg-amber-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-rose-500 to-purple-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min((getTodayStudyTime() / 180) * 100, 100)}%` }}
+                />
               </div>
             </div>
           </>
@@ -2500,23 +2564,6 @@ const StudyTrackerApp = ({ session }) => {
         )}
           </>
         )}
-
-        {/* Navigation */}
-        <div className="bg-gradient-to-r from-indigo-100 via-purple-100 to-pink-100 rounded-xl shadow-xl mb-4 p-3 flex gap-2 overflow-x-auto border-2 border-indigo-200">
-          {['dashboard', 'daily', 'calendar', 'analytics', 'subjects', 'exams', 'docs'].map(view => (
-            <button
-              key={view}
-              onClick={() => setActiveView(view)}
-              className={`px-5 py-2.5 rounded-lg font-semibold transition-all whitespace-nowrap shadow-md ${
-                activeView === view
-                  ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-500 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-lg'
-              }`}
-            >
-              {view.charAt(0).toUpperCase() + view.slice(1)}
-            </button>
-          ))}
-        </div>
 
         {/* Dashboard View */}
         {activeView === 'dashboard' && (
@@ -5586,6 +5633,7 @@ const StudyTrackerApp = ({ session }) => {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

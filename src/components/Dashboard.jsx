@@ -100,9 +100,20 @@ const Dashboard = ({
   const [showPointsInfo, setShowPointsInfo] = useState(false);
   const [showBadgeInfo, setShowBadgeInfo] = useState(false);
   const [showSubjectInsights, setShowSubjectInsights] = useState(true);
+  const [leaderboardType, setLeaderboardType] = useState('all-time'); // 'all-time' or 'daily'
+  
+  // Filter tasks for active profile only
+  const profileTasks = useMemo(() => {
+    return activeProfile ? tasks.filter(t => t.profile_id === activeProfile.id) : tasks;
+  }, [tasks, activeProfile]);
+  
+  // Filter subjects for active profile only
+  const profileSubjects = useMemo(() => {
+    return activeProfile ? subjects.filter(s => s.profile_id === activeProfile.id) : subjects;
+  }, [subjects, activeProfile]);
   
   // Calculate current streak
-  const currentStreak = useMemo(() => calculateStreak(tasks), [tasks]);
+  const currentStreak = useMemo(() => calculateStreak(profileTasks), [profileTasks]);
   
   // Get current week (Monday to Sunday) for calendar
   const streakCalendar = useMemo(() => {
@@ -123,7 +134,7 @@ const Dashboard = ({
       date.setDate(monday.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];
       
-      const dayTasks = tasks.filter(t => t.date === dateStr);
+      const dayTasks = profileTasks.filter(t => t.date === dateStr);
       const completedTasks = dayTasks.filter(t => t.completed);
       const completedTime = completedTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
       
@@ -139,12 +150,12 @@ const Dashboard = ({
     }
     
     return calendar;
-  }, [tasks]);
+  }, [profileTasks]);
   
   // Calculate stats
   const stats = useMemo(() => {
     const today = getTodayDateIST();
-    const todayTasks = tasks.filter(t => t.date === today);
+    const todayTasks = profileTasks.filter(t => t.date === today);
     const completedToday = todayTasks.filter(t => t.completed);
     const totalMinutesToday = completedToday.reduce((sum, t) => sum + (t.duration || 0), 0);
     
@@ -154,13 +165,13 @@ const Dashboard = ({
     weekAgo.setDate(weekAgo.getDate() - 6); // Last 7 days including today
     const weekAgoStr = weekAgo.toISOString().split('T')[0];
     
-    const weeklyTasks = tasks.filter(t => {
+    const weeklyTasks = profileTasks.filter(t => {
       return t.completed && t.date >= weekAgoStr && t.date <= today;
     });
     const totalMinutesWeek = weeklyTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
     
     // Get all tasks for this profile
-    const allTasks = tasks;
+    const allTasks = profileTasks;
     const allCompleted = allTasks.filter(t => t.completed);
     
     // Calculate completion percentage
@@ -168,8 +179,9 @@ const Dashboard = ({
       ? Math.round((allCompleted.length / allTasks.length) * 100)
       : 0;
     
-    // Upcoming exams
-    const upcomingExams = exams.filter(exam => {
+    // Upcoming exams (filter by active profile)
+    const profileExams = activeProfile ? exams.filter(e => e.profile_id === activeProfile.id) : exams;
+    const upcomingExams = profileExams.filter(exam => {
       const examDates = exam.subjects?.map(s => s.date) || [];
       return examDates.some(date => date >= today);
     }).length;
@@ -183,24 +195,24 @@ const Dashboard = ({
       studyMinutesWeek: totalMinutesWeek,
       studyHoursWeek: Math.floor(totalMinutesWeek / 60),
       upcomingExams,
-      totalSubjects: subjects.length,
+      totalSubjects: profileSubjects.length,
     };
-  }, [tasks, exams, subjects]);
+  }, [profileTasks, exams, profileSubjects, activeProfile]);
 
   // Get all badges with locked/unlocked status
   const allBadgesWithStatus = useMemo(() => {
     return ALL_BADGES.map(badge => ({
       ...badge,
-      unlocked: badge.checkUnlocked({ ...stats, totalSubjects: subjects.length })
+      unlocked: badge.checkUnlocked({ ...stats, totalSubjects: profileSubjects.length })
     }));
-  }, [stats, subjects.length]);
+  }, [stats, profileSubjects.length]);
 
   // Get subject-wise analytics
   const subjectAnalytics = useMemo(() => {
     const subjectData = {};
 
-    subjects.forEach(subject => {
-      const subjectTasks = tasks.filter(t => t.subject === subject.name);
+    profileSubjects.forEach(subject => {
+      const subjectTasks = profileTasks.filter(t => t.subject === subject.name);
       const completedTasks = subjectTasks.filter(t => t.completed);
       const totalTime = completedTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
       
@@ -225,7 +237,7 @@ const Dashboard = ({
     });
 
     return Object.values(subjectData);
-  }, [tasks, subjects]);
+  }, [profileTasks, profileSubjects]);
 
   // Get most active subjects (last 7 days) - show all
   const mostActiveSubjects = useMemo(() => {
@@ -243,19 +255,38 @@ const Dashboard = ({
       // Include subjects never studied
       if (subject.totalTasks === 0) return true;
       // Include subjects with no recent activity
-      const recentTasks = tasks.filter(t => 
+      const recentTasks = profileTasks.filter(t => 
         t.subject === subject.name && 
         new Date(t.date) >= threeDaysAgo
       );
       return recentTasks.length === 0;
     });
-  }, [tasks, subjectAnalytics]);
+  }, [profileTasks, subjectAnalytics]);
+
+  // Calculate daily points (only from today's activity)
+  const calculateDailyPoints = (profile, tasks) => {
+    const today = getTodayDateIST();
+    let dailyPoints = 0;
+    
+    // 1. Today's completed tasks (10 pts each)
+    const todayTasks = tasks.filter(t => t.date === today && t.completed);
+    dailyPoints += todayTasks.length * 10;
+    
+    // 2. Today's study time (1 pt per minute)
+    const todayStudyMinutes = todayTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
+    dailyPoints += todayStudyMinutes;
+    
+    // Note: Badges, streaks, and milestones are cumulative achievements,
+    // so they aren't included in daily points - only task completion and study time for today
+    
+    return dailyPoints;
+  };
 
   // Calculate leaderboard with real points
   const leaderboard = useMemo(() => {
     return profiles.map(profile => {
       // Get tasks for this profile
-      const profileTasks = tasks.filter(t => t.profileId === profile.id);
+      const profileTasks = tasks.filter(t => t.profile_id === profile.id);
       
       // Get unlocked badges for this profile
       const profileStats = {
@@ -275,7 +306,7 @@ const Dashboard = ({
         completionRate: profileTasks.length > 0
           ? Math.round((profileTasks.filter(t => t.completed).length / profileTasks.length) * 100)
           : 0,
-        totalSubjects: subjects.length
+        totalSubjects: subjects.filter(s => s.profile_id === profile.id).length
       };
       
       const unlockedBadges = ALL_BADGES.filter(badge => 
@@ -285,17 +316,22 @@ const Dashboard = ({
       // Get exams for this profile
       const profileExams = exams.filter(e => e.profile_id === profile.id);
       
-      // Calculate real points
-      const points = calculatePoints(profile, profileTasks, unlockedBadges, profileExams);
+      // Calculate points based on leaderboard type
+      const allTimePoints = calculatePoints(profile, profileTasks, unlockedBadges, profileExams);
+      const dailyPoints = calculateDailyPoints(profile, profileTasks);
+      const points = leaderboardType === 'daily' ? dailyPoints : allTimePoints;
       
       return {
         ...profile,
-        points
+        points,
+        dailyPoints,
+        allTimePoints,
+        unlockedBadges: unlockedBadges.length
       };
     })
     .sort((a, b) => b.points - a.points)
     .slice(0, 5);
-  }, [profiles, tasks, subjects, exams]);
+  }, [profiles, tasks, subjects, exams, leaderboardType]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
@@ -303,7 +339,7 @@ const Dashboard = ({
         
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-gray-500 mb-2">
+          <h1 className="text-3xl font-semibold text-gray-900 mb-2">
             Dashboard
           </h1>
           <p className="text-gray-600">
@@ -365,7 +401,7 @@ const Dashboard = ({
             {/* Study Streak Section - Enhanced with Activity */}
             <div className="bg-white rounded-2xl p-6 shadow-card">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-gray-500">Study Streak</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Study Streak</h2>
                 <Flame className="w-5 h-5 text-orange-500" />
               </div>
               
@@ -498,7 +534,7 @@ const Dashboard = ({
                 className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
                 onClick={() => setShowSubjectInsights(!showSubjectInsights)}
               >
-                <h2 className="text-lg font-semibold text-gray-500">Subject Insights</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Subject Insights</h2>
                 {showSubjectInsights ? 
                   <ChevronUp className="w-5 h-5 text-gray-400" /> : 
                   <ChevronDown className="w-5 h-5 text-gray-400" />
@@ -559,7 +595,7 @@ const Dashboard = ({
             {/* Today's Progress */}
             <div className="bg-white rounded-2xl p-6 shadow-card">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-500">Today's Progress</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Today's Progress</h2>
                 <button className="text-sm text-accent-blue hover:underline">
                   View all
                 </button>
@@ -612,7 +648,7 @@ const Dashboard = ({
             <div className="bg-white rounded-2xl p-6 shadow-card">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold text-gray-500">Badge Collection</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Badge Collection</h2>
                   <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-semibold">
                     {allBadgesWithStatus.filter(b => b.unlocked).length}/{allBadgesWithStatus.length}
                   </span>
@@ -786,7 +822,7 @@ const Dashboard = ({
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-card sticky top-6 z-10">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-500">Leaderboard</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Leaderboard</h2>
                 <button
                   onClick={() => setShowPointsInfo(!showPointsInfo)}
                   className="p-1 hover:bg-gray-100 rounded-full transition-colors"
@@ -795,6 +831,37 @@ const Dashboard = ({
                   <Info className="w-5 h-5 text-gray-600" />
                 </button>
               </div>
+              
+              {/* Toggle between All-Time and Daily */}
+              <div className="flex gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => setLeaderboardType('all-time')}
+                  className={`flex-1 px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+                    leaderboardType === 'all-time'
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  🏆 All-Time
+                </button>
+                <button
+                  onClick={() => setLeaderboardType('daily')}
+                  className={`flex-1 px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+                    leaderboardType === 'daily'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-md'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  📅 Today
+                </button>
+              </div>
+              
+              {/* Daily mode info */}
+              {leaderboardType === 'daily' && (
+                <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                  <strong>Today's Leaderboard:</strong> Only counts tasks completed & study time from today
+                </div>
+              )}
               
               {/* Points Info Tooltip - Compact */}
               {showPointsInfo && (
@@ -853,7 +920,10 @@ const Dashboard = ({
                     
                     {/* Streaks - 2 column grid */}
                     <div className="pt-1.5 border-t border-blue-200">
-                      <div className="font-semibold text-gray-500 mb-1 text-[11px]">🔥 Streaks</div>
+                      <div className="font-semibold text-gray-500 mb-1 text-[11px] flex items-center gap-1">
+                        🔥 Streaks
+                        <span className="text-[9px] font-normal text-gray-400">(Bonuses stack!)</span>
+                      </div>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Daily</span>
@@ -872,11 +942,17 @@ const Dashboard = ({
                           <span className="font-semibold text-orange-600">+1000</span>
                         </div>
                       </div>
+                      <div className="mt-1 text-[9px] text-gray-400 italic">
+                        * 30-day streak = (30×25) + 200 + 400 + 1000 = 2,350 pts!
+                      </div>
                     </div>
                     
                     {/* Completion - 2 column grid */}
                     <div className="pt-1.5 border-t border-blue-200">
-                      <div className="font-semibold text-gray-500 mb-1 text-[11px]">📊 Completion</div>
+                      <div className="font-semibold text-gray-500 mb-1 text-[11px] flex items-center gap-1">
+                        📊 Completion
+                        <span className="text-[9px] font-normal text-gray-400">(Min 10 tasks)</span>
+                      </div>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
                         <div className="flex justify-between">
                           <span className="text-gray-600">50%</span>
@@ -895,24 +971,33 @@ const Dashboard = ({
                           <span className="font-semibold text-green-600">500</span>
                         </div>
                       </div>
+                      <div className="mt-1 text-[9px] text-gray-400 italic">
+                        * Only counts tasks up to today
+                      </div>
                     </div>
                     
                     {/* Exam Scores - 1 column (fewer items) */}
                     <div className="pt-1.5 border-t border-blue-200">
-                      <div className="font-semibold text-gray-500 mb-1 text-[11px]">🎯 Exam Scores</div>
+                      <div className="font-semibold text-gray-500 mb-1 text-[11px] flex items-center gap-1">
+                        🎯 Exam Scores
+                        <span className="text-[9px] font-normal text-gray-400">(Per subject)</span>
+                      </div>
                       <div className="space-y-0.5 text-[10px]">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">&gt;90%</span>
+                          <span className="text-gray-600">90-94%</span>
                           <span className="font-semibold">100 pts</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">&gt;95%</span>
+                          <span className="text-gray-600">95-99%</span>
                           <span className="font-semibold text-orange-600">200 pts</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">100%</span>
                           <span className="font-semibold text-green-600">300 pts</span>
                         </div>
+                      </div>
+                      <div className="mt-1 text-[9px] text-gray-400 italic">
+                        * 5 subjects at 100% = 1,500 pts total!
                       </div>
                     </div>
                   </div>
@@ -951,10 +1036,22 @@ const Dashboard = ({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="flex items-center gap-1 text-accent-blue">
+                        <div className={`flex items-center gap-1 ${
+                          leaderboardType === 'daily' ? 'text-green-600' : 'text-accent-blue'
+                        }`}>
                           <Zap className="w-4 h-4" />
                           <span className="text-sm font-semibold">{profile.points}</span>
                         </div>
+                        {/* Show opposite score as subtitle */}
+                        {leaderboardType === 'daily' ? (
+                          <div className="text-[10px] text-gray-500 text-right mt-0.5">
+                            🏆 {profile.allTimePoints} all-time
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-gray-500 text-right mt-0.5">
+                            📅 {profile.dailyPoints} today
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

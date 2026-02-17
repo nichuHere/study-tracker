@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 import Dashboard from './Dashboard';
@@ -130,6 +130,8 @@ const StudyTrackerApp = ({ session }) => {
   const [profileSwitched, setProfileSwitched] = useState(false);
   const [switchedProfileName, setSwitchedProfileName] = useState('');
   const [notificationsMinimized, setNotificationsMinimized] = useState(false);
+  const [showTrackingModeNotification, setShowTrackingModeNotification] = useState(false);
+  const [pendingTrackingModeProfile, setPendingTrackingModeProfile] = useState(null);
   const [todayNotificationsMinimized, setTodayNotificationsMinimized] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState([]);
   const [showAllReminders, setShowAllReminders] = useState(false);
@@ -242,20 +244,25 @@ const StudyTrackerApp = ({ session }) => {
 
   const loadProfileData = async (profileId) => {
     try {
-      // Load data from Supabase (reminders loaded by useReminders hook)
+      // Load ALL data from Supabase for leaderboard to work correctly
+      // Dashboard will filter by profile as needed
       const [subjectsResult, tasksResult, examsResult, standardResult] = await Promise.all([
-        supabase.from('subjects').select('*').eq('profile_id', profileId),
-        supabase.from('tasks').select('*').eq('profile_id', profileId),
-        supabase.from('exams').select('*').eq('profile_id', profileId),
-        supabase.from('standard_activities').select('*').eq('profile_id', profileId)
+        supabase.from('subjects').select('*'), // Load all subjects
+        supabase.from('tasks').select('*'),     // Load all tasks
+        supabase.from('exams').select('*'),     // Load all exams
+        supabase.from('standard_activities').select('*').eq('profile_id', profileId) // Profile-specific activities
       ]);
 
       setSubjects(subjectsResult.data || []);
       
       // Process task rollover for incomplete tasks from previous days
+      // Only process for the active profile
       const tasksData = tasksResult.data || [];
-      const updatedTasks = await processTaskRollover(tasksData, profileId);
-      setTasks(updatedTasks);
+      const profileTasks = tasksData.filter(t => t.profile_id === profileId);
+      const updatedProfileTasks = await processTaskRollover(profileTasks, profileId);
+      // Merge updated profile tasks with other profiles' tasks
+      const otherTasks = tasksData.filter(t => t.profile_id !== profileId);
+      setTasks([...updatedProfileTasks, ...otherTasks]);
       
       const examsData = examsResult.data || [];
       console.log('📚 Loading exams from database:', examsData);
@@ -307,6 +314,81 @@ const StudyTrackerApp = ({ session }) => {
     setSwitchedProfileName(profile.name);
     setProfileSwitched(true);
     setTimeout(() => setProfileSwitched(false), 2500);
+    
+    // Check if tracking mode is set, if not show notification
+    if (!profile.chapter_tracking_mode) {
+      setPendingTrackingModeProfile(profile);
+      setShowTrackingModeNotification(true);
+    }
+  };
+
+  // Toggle chapter completion (Smart mode)
+  const toggleChapterCompletion = async (subjectId, chapterIndex) => {
+    try {
+      const subject = subjects.find(s => s.id === subjectId);
+      if (!subject) return;
+      
+      const normalizedSubject = normalizeSubjectChapters(subject);
+      const chapters = [...normalizedSubject.chapters];
+      const chapter = chapters[chapterIndex];
+      
+      chapters[chapterIndex] = {
+        ...chapter,
+        completed: !chapter.completed,
+        completedDate: !chapter.completed ? getTodayDateIST() : null
+      };
+      
+      const { error } = await supabase
+        .from('subjects')
+        .update({ chapters })
+        .eq('id', subjectId);
+      
+      if (error) throw error;
+      
+      const updated = subjects.map(s => 
+        s.id === subjectId ? { ...s, chapters } : s
+      );
+      setSubjects(updated);
+      if (viewingSubject?.id === subjectId) {
+        setViewingSubject({ ...viewingSubject, chapters });
+      }
+    } catch (error) {
+      console.error('Error toggling chapter completion:', error);
+    }
+  };
+
+  // Update subject chapter status (Comprehensive mode)
+  const updateSubjectChapterStatus = async (subjectId, chapterIndex, newStatus) => {
+    try {
+      const subject = subjects.find(s => s.id === subjectId);
+      if (!subject) return;
+      
+      const normalizedSubject = normalizeSubjectChapters(subject);
+      const chapters = [...normalizedSubject.chapters];
+      
+      chapters[chapterIndex] = {
+        ...chapters[chapterIndex],
+        status: newStatus,
+        lastStudied: newStatus !== 'pending' ? getTodayDateIST() : chapters[chapterIndex].lastStudied
+      };
+      
+      const { error } = await supabase
+        .from('subjects')
+        .update({ chapters })
+        .eq('id', subjectId);
+      
+      if (error) throw error;
+      
+      const updated = subjects.map(s => 
+        s.id === subjectId ? { ...s, chapters } : s
+      );
+      setSubjects(updated);
+      if (viewingSubject?.id === subjectId) {
+        setViewingSubject({ ...viewingSubject, chapters });
+      }
+    } catch (error) {
+      console.error('Error updating subject chapter status:', error);
+    }
   };
 
   // Dismiss notification
@@ -321,6 +403,33 @@ const StudyTrackerApp = ({ session }) => {
   const isNotificationDismissed = (id, type) => {
     const notificationId = `${type}-${id}`;
     return dismissedNotifications.includes(notificationId);
+  };
+
+  // Handle chapter tracking mode selection
+  const selectTrackingMode = async (mode) => {
+    if (!pendingTrackingModeProfile) return;
+    
+    try {
+      // Update profile in database
+      const { error } = await supabase
+        .from('profiles')
+        .update({ chapter_tracking_mode: mode })
+        .eq('id', pendingTrackingModeProfile.id);
+      
+      if (error) throw error;
+      
+      // Update local profile state
+      const updatedProfile = { ...pendingTrackingModeProfile, chapter_tracking_mode: mode };
+      if (activeProfile?.id === pendingTrackingModeProfile.id) {
+        setActiveProfile(updatedProfile);
+      }
+      
+      // Close notification
+      setShowTrackingModeNotification(false);
+      setPendingTrackingModeProfile(null);
+    } catch (error) {
+      console.error('Error updating chapter tracking mode:', error);
+    }
   };
 
   // Shared activities management
@@ -487,6 +596,49 @@ const StudyTrackerApp = ({ session }) => {
     }
   };
 
+  // Normalize chapter data - convert strings to objects based on tracking mode
+  const normalizeChapter = (chapterData, trackingMode = 'smart') => {
+    // If already an object with required fields, return as is
+    if (typeof chapterData === 'object' && chapterData.name) {
+      return chapterData;
+    }
+    
+    // Convert string to object based on tracking mode
+    const chapterName = typeof chapterData === 'string' ? chapterData : chapterData.toString();
+    
+    if (trackingMode === 'comprehensive') {
+      return {
+        name: chapterName,
+        status: 'pending',
+        studyTime: 0,
+        taskCount: 0,
+        lastStudied: null,
+        revisionsNeeded: 0,
+        revisionsCompleted: 0
+      };
+    } else {
+      // Smart mode
+      return {
+        name: chapterName,
+        completed: false,
+        completedDate: null,
+        studyTime: 0,
+        taskCount: 0,
+        lastStudied: null
+      };
+    }
+  };
+
+  // Normalize all chapters for a subject
+  const normalizeSubjectChapters = (subject) => {
+    if (!subject.chapters || subject.chapters.length === 0) return subject;
+    
+    const trackingMode = activeProfile?.chapter_tracking_mode || 'smart';
+    const normalizedChapters = subject.chapters.map(ch => normalizeChapter(ch, trackingMode));
+    
+    return { ...subject, chapters: normalizedChapters };
+  };
+
   const addChapterToSubject = async (subjectId, chapterName) => {
     if (!chapterName || !chapterName.trim()) return;
     
@@ -494,7 +646,9 @@ const StudyTrackerApp = ({ session }) => {
       const subject = subjects.find(s => s.id === subjectId);
       if (!subject) return;
       
-      const updatedChapters = [...(subject.chapters || []), chapterName.trim()];
+      const trackingMode = activeProfile?.chapter_tracking_mode || 'smart';
+      const newChapter = normalizeChapter(chapterName.trim(), trackingMode);
+      const updatedChapters = [...(subject.chapters || []), newChapter];
       
       const { error } = await supabase
         .from('subjects')
@@ -512,6 +666,28 @@ const StudyTrackerApp = ({ session }) => {
     } catch (error) {
       console.error('Error adding chapter:', error);
     }
+  };
+
+  const profileSubjects = activeProfile
+    ? subjects.filter(s => s.profile_id === activeProfile.id)
+    : [];
+
+  const getProfileSubjectByName = (subjectName) => {
+    if (!subjectName) return null;
+    return profileSubjects.find(s => s.name === subjectName) || null;
+  };
+
+  const getChapterNamesForSubject = (subjectName) => {
+    const subject = getProfileSubjectByName(subjectName);
+    if (!subject?.chapters || !Array.isArray(subject.chapters)) return [];
+
+    return subject.chapters
+      .map((chapter) => {
+        if (typeof chapter === 'string') return chapter;
+        if (chapter && typeof chapter === 'object') return chapter.name || '';
+        return '';
+      })
+      .filter((chapterName) => typeof chapterName === 'string' && chapterName.trim().length > 0);
   };
 
   // Task management
@@ -638,6 +814,57 @@ const StudyTrackerApp = ({ session }) => {
       });
       setNewExamSubject({ subject: '', date: '', chapters: [], keyPoints: '' });
     }
+  };
+
+  const addSubjectToExistingExam = async (examId) => {
+    const subjectName = (newExamSubject.subject || '').trim();
+    if (!subjectName) return;
+
+    const exam = exams.find(e => e.id === examId);
+    if (!exam) return;
+
+    const fallbackDate = exam.date || exam.subjects?.[0]?.date || getTodayDateIST();
+    const subjectDate = newExamSubject.date || fallbackDate;
+
+    const normalizedSubject = {
+      ...newExamSubject,
+      subject: subjectName,
+      date: subjectDate,
+      chapters: (newExamSubject.chapters || [])
+        .map((chapter) => {
+          if (typeof chapter === 'string') {
+            const chapterName = chapter.trim();
+            if (!chapterName) return null;
+            return {
+              name: chapterName,
+              status: 'pending',
+              revisionsNeeded: 0,
+              revisionsCompleted: 0
+            };
+          }
+
+          if (chapter && typeof chapter === 'object') {
+            const chapterName = (chapter.name || '').toString().trim();
+            if (!chapterName) return null;
+            return {
+              ...chapter,
+              name: chapterName,
+              status: chapter.status || 'pending',
+              revisionsNeeded: chapter.revisionsNeeded ?? 0,
+              revisionsCompleted: chapter.revisionsCompleted ?? 0
+            };
+          }
+
+          return null;
+        })
+        .filter(Boolean)
+    };
+
+    const updatedSubjects = [...(Array.isArray(exam.subjects) ? exam.subjects : []), normalizedSubject];
+    await updateExam(examId, { subjects: updatedSubjects });
+
+    setNewExamSubject({ subject: '', date: '', chapters: [], keyPoints: '' });
+    setExamChapterInput('');
   };
 
   const removeSubjectFromExam = (index) => {
@@ -1284,6 +1511,75 @@ const StudyTrackerApp = ({ session }) => {
     }).slice(0, 3);
   };
 
+  // Get exam analytics data
+  const getExamAnalytics = () => {
+    // Get all exams with marks data
+    const examsWithMarks = exams
+      .filter(exam => exam.subjects && Array.isArray(exam.subjects))
+      .map(exam => ({
+        ...exam,
+        subjects: exam.subjects.filter(s => s.marks != null && s.marks >= 0)
+      }))
+      .filter(exam => exam.subjects.length > 0)
+      .sort((a, b) => {
+        // Sort by earliest subject date
+        const dateA = Math.min(...a.subjects.map(s => new Date(s.date)));
+        const dateB = Math.min(...b.subjects.map(s => new Date(s.date)));
+        return dateA - dateB;
+      });
+
+    // Calculate average marks per exam
+    const examAverages = examsWithMarks.map(exam => {
+      const totalMarks = exam.subjects.reduce((sum, s) => sum + s.marks, 0);
+      const average = exam.subjects.length > 0 ? Math.round(totalMarks / exam.subjects.length * 10) / 10 : 0;
+      return {
+        name: exam.name,
+        average,
+        subjectCount: exam.subjects.length,
+        subjects: exam.subjects
+      };
+    });
+
+    // Get subject-wise performance across exams
+    const subjectPerformance = {};
+    subjects.forEach(subject => {
+      const subjectMarks = [];
+      examsWithMarks.forEach(exam => {
+        const subjectData = exam.subjects.find(s => s.subject === subject.name);
+        if (subjectData) {
+          subjectMarks.push({
+            examName: exam.name,
+            marks: subjectData.marks,
+            date: subjectData.date
+          });
+        }
+      });
+      
+      if (subjectMarks.length > 0) {
+        const totalMarks = subjectMarks.reduce((sum, m) => sum + m.marks, 0);
+        const average = Math.round(totalMarks / subjectMarks.length * 10) / 10;
+        subjectPerformance[subject.name] = {
+          name: subject.name,
+          exams: subjectMarks,
+          average,
+          trend: subjectMarks.length >= 2 ? subjectMarks[subjectMarks.length - 1].marks - subjectMarks[0].marks : 0
+        };
+      }
+    });
+
+    // Calculate overall average across all exams
+    const allMarks = examsWithMarks.flatMap(exam => exam.subjects.map(s => s.marks));
+    const overallAverage = allMarks.length > 0 ? Math.round(allMarks.reduce((sum, m) => sum + m, 0) / allMarks.length * 10) / 10 : 0;
+
+    return {
+      examsWithMarks,
+      examAverages,
+      subjectPerformance: Object.values(subjectPerformance),
+      overallAverage,
+      totalExamsWithMarks: examsWithMarks.length
+    };
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4">
       {_loading && (
@@ -1301,7 +1597,7 @@ const StudyTrackerApp = ({ session }) => {
         {/* Profile Selector */}
         {profiles.length === 0 ? (
           <div className="bg-white rounded-lg shadow-lg p-8 mb-4 text-center">
-            <h2 className="text-2xl font-semibold text-gray-500 mb-4">Welcome to Kannama Study Tracker!</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Welcome to Kannama Study Tracker!</h2>
             <p className="text-gray-600 mb-6">Create a profile for your first child to get started</p>
             
             <div className="max-w-md mx-auto space-y-3">
@@ -1341,6 +1637,101 @@ const StudyTrackerApp = ({ session }) => {
                     <div className="text-lg font-semibold">{switchedProfileName}</div>
                   </div>
                   <CheckCircle className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            )}
+
+            {/* Chapter Tracking Mode Selection Notification */}
+            {showTrackingModeNotification && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-6 rounded-t-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white/20 p-3 rounded-lg">
+                        <BookOpen className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-semibold">Choose Chapter Tracking Mode</h2>
+                        <p className="text-sm text-white/80 mt-1">Select how you want to track chapter progress for {pendingTrackingModeProfile?.name}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-6 space-y-4">
+                    <p className="text-gray-600 text-sm">
+                      Choose between two tracking modes based on your preference:
+                    </p>
+
+                    {/* Option 1: Smart Tracking (Default) */}
+                    <button
+                      onClick={() => selectTrackingMode('smart')}
+                      className="w-full text-left border-2 border-indigo-300 bg-indigo-50 rounded-lg p-5 hover:border-indigo-400 hover:bg-indigo-100 transition-all group"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Zap className="w-5 h-5 text-indigo-600" />
+                            <h3 className="text-lg font-semibold text-gray-900">Smart Tracking</h3>
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">RECOMMENDED</span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3">
+                            ✨ Simple checkbox for completion with automatic metadata tracking
+                          </p>
+                          <ul className="text-xs text-gray-600 space-y-1 ml-4">
+                            <li>• Quick and easy to use - just check when done</li>
+                            <li>• Automatically tracks: study time, tasks, last studied date</li>
+                            <li>• Visual indicators for activity status</li>
+                            <li>• Perfect for busy schedules</li>
+                          </ul>
+                        </div>
+                        <div className="ml-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                          <ChevronRight className="w-6 h-6 text-indigo-600" />
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Option 2: Comprehensive Tracking */}
+                    <button
+                      onClick={() => selectTrackingMode('comprehensive')}
+                      className="w-full text-left border-2 border-gray-300 bg-white rounded-lg p-5 hover:border-purple-400 hover:bg-purple-50 transition-all group"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Target className="w-5 h-5 text-purple-600" />
+                            <h3 className="text-lg font-semibold text-gray-900">Comprehensive Tracking</h3>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3">
+                            📊 Detailed tracking with full control over all metrics
+                          </p>
+                          <ul className="text-xs text-gray-600 space-y-1 ml-4">
+                            <li>• Manual completion with status tracking</li>
+                            <li>• Track study time, tasks completed, revisions needed</li>
+                            <li>• View last studied date for each chapter</li>
+                            <li>• Color-coded activity indicators</li>
+                            <li>• Best for detailed planning and review</li>
+                          </ul>
+                        </div>
+                        <div className="ml-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                          <ChevronRight className="w-6 h-6 text-purple-600" />
+                        </div>
+                      </div>
+                    </button>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-blue-800">
+                          <p className="font-medium mb-1">💡 You can change this later</p>
+                          <p className="text-xs text-blue-700">
+                            This setting can be changed anytime in Profile Settings. We recommend starting with <strong>Smart Tracking</strong> for simplicity.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1479,7 +1870,7 @@ const StudyTrackerApp = ({ session }) => {
                 <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-semibold text-gray-500">Manage Default Activities</h2>
+                      <h2 className="text-xl font-semibold text-gray-900">Manage Default Activities</h2>
                   <button
                     onClick={() => {
                       setShowActivitiesManager(false);
@@ -1763,7 +2154,7 @@ const StudyTrackerApp = ({ session }) => {
                 {profileTab === 'kids' && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-500">Manage Kids</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">Manage Kids</h3>
                       <span className="text-sm text-gray-600">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
                     </div>
 
@@ -1801,6 +2192,22 @@ const StudyTrackerApp = ({ session }) => {
                                 placeholder="e.g., Grade 5"
                               />
                             </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Chapter Tracking Mode</label>
+                              <select
+                                value={editProfileData.chapter_tracking_mode || 'smart'}
+                                onChange={(e) => setEditProfileData({ ...editProfileData, chapter_tracking_mode: e.target.value })}
+                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                              >
+                                <option value="smart">✨ Smart Tracking (Recommended)</option>
+                                <option value="comprehensive">📊 Comprehensive Tracking</option>
+                              </select>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {editProfileData.chapter_tracking_mode === 'comprehensive' 
+                                  ? 'Full tracking with manual completion, study time, tasks, and revisions'
+                                  : 'Simple checkbox with automatic metadata tracking'}
+                              </p>
+                            </div>
                             <div className="flex gap-2 pt-2">
                               <button
                                 onClick={() => updateProfile(profile.id)}
@@ -1811,7 +2218,7 @@ const StudyTrackerApp = ({ session }) => {
                               <button
                                 onClick={() => {
                                   setEditingProfile(null);
-                                  setEditProfileData({ name: '', class: '' });
+                                  setEditProfileData({ name: '', class: '', chapter_tracking_mode: 'smart' });
                                 }}
                                 className="px-4 py-2 bg-gray-200 text-gray-500 rounded-lg hover:bg-gray-300 font-medium"
                               >
@@ -1872,7 +2279,11 @@ const StudyTrackerApp = ({ session }) => {
                               <button
                                 onClick={() => {
                                   setEditingProfile(profile.id);
-                                  setEditProfileData({ name: profile.name, class: profile.class || '' });
+                                  setEditProfileData({ 
+                                    name: profile.name, 
+                                    class: profile.class || '',
+                                    chapter_tracking_mode: profile.chapter_tracking_mode || 'smart'
+                                  });
                                 }}
                                 className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg"
                                 title="Edit profile"
@@ -2047,7 +2458,7 @@ const StudyTrackerApp = ({ session }) => {
             <div className="bg-white rounded-2xl shadow-card p-8 border border-gray-100">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h1 className="text-3xl font-semibold mb-2 text-gray-500">Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {activeProfile?.name}! 👋</h1>
+                  <h1 className="text-3xl font-semibold mb-2 text-gray-900">Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {activeProfile?.name}! 👋</h1>
                   <p className="text-gray-600 text-lg">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
                 <div className="bg-pastel-purple-light rounded-xl p-4 text-center shadow-soft">
@@ -2076,11 +2487,11 @@ const StudyTrackerApp = ({ session }) => {
             {/* Today's Notifications & Reminders */}
             {(getDailySuggestions().length > 0 || getTodaysReminders().length > 0 || getTodaysRecurringReminders().length > 0) && (
               <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden transition-all duration-300">
-                <div className="flex items-center justify-between p-6 bg-pastel-yellow-light border-b border-gray-100">
-                  <div className="flex items-center gap-3">
-                    <Bell className="w-6 h-6 text-gray-500" />
+                <div className="flex items-center justify-between p-4 bg-pastel-yellow-light border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-orange-600" />
                     <div>
-                      <h2 className="text-2xl font-semibold text-gray-500">Today's Notifications</h2>
+                      <h2 className="text-lg font-semibold text-gray-900">Today's Notifications</h2>
                       {todayNotificationsMinimized && (
                         <p className="text-xs text-gray-600">
                           {getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
@@ -2092,7 +2503,7 @@ const StudyTrackerApp = ({ session }) => {
                   </div>
                   <div className="flex items-center gap-2">
                     {!todayNotificationsMinimized && (
-                      <span className="bg-pastel-coral text-orange-600 px-3 py-1 rounded-full text-sm font-semibold shadow-soft">
+                      <span className="bg-pastel-coral text-orange-700 px-2.5 py-1 rounded-full text-xs font-semibold">
                         {getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
                          getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
                          getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length}
@@ -2100,10 +2511,10 @@ const StudyTrackerApp = ({ session }) => {
                     )}
                     <button
                       onClick={() => setTodayNotificationsMinimized(!todayNotificationsMinimized)}
-                      className="p-2 bg-white hover:bg-pastel-orange-light rounded-xl transition-all border border-gray-200 shadow-soft hover:shadow-card"
+                      className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
                       title={todayNotificationsMinimized ? 'Expand notifications' : 'Minimize notifications'}
                     >
-                      {todayNotificationsMinimized ? <ChevronDown className="w-5 h-5 text-orange-600" /> : <ChevronUp className="w-5 h-5 text-orange-600" />}
+                      {todayNotificationsMinimized ? <ChevronDown className="w-4 h-4 text-orange-600" /> : <ChevronUp className="w-4 h-4 text-orange-600" />}
                     </button>
                   </div>
                 </div>
@@ -2116,30 +2527,30 @@ const StudyTrackerApp = ({ session }) => {
                     overflow: todayNotificationsMinimized ? 'hidden' : 'visible'
                   }}
                 >
-                  <div className="p-6">
+                  <div className="p-4">
                 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {/* Today's Reminders */}
                   {getTodaysReminders()
                     .filter(reminder => !isNotificationDismissed(reminder.id, 'reminder'))
                     .map((reminder) => (
-                    <div key={reminder.id} className="flex items-start gap-3 p-4 bg-pastel-yellow-light border-l-4 border-pastel-orange rounded-xl hover:shadow-card transition-all">
-                      <Clock className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                      <div className="flex-1">
+                    <div key={reminder.id} className="flex items-center gap-2 p-3 bg-pastel-yellow-light border-l-3 border-pastel-orange rounded-lg hover:shadow-md transition-all group">
+                      <Clock className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 bg-pastel-orange text-orange-700 text-xs font-semibold rounded-full shadow-soft">TODAY</span>
-                          <span className="font-semibold text-gray-500">{reminder.title}</span>
+                          <span className="px-1.5 py-0.5 bg-pastel-orange text-orange-700 text-[10px] font-semibold rounded uppercase">Today</span>
+                          <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
                         </div>
                         {reminder.description && (
-                          <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
+                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{reminder.description}</p>
                         )}
                       </div>
                       <button
                         onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'reminder');}}
-                        className="text-gray-500 hover:text-gray-500 p-2 flex-shrink-0 hover:bg-gray-100 rounded-lg transition-all"
+                        className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                         title="Dismiss"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -2148,26 +2559,23 @@ const StudyTrackerApp = ({ session }) => {
                   {getTodaysRecurringReminders()
                     .filter(reminder => !isNotificationDismissed(reminder.id, 'recurring'))
                     .map((reminder) => (
-                    <div key={reminder.id} className="flex items-start gap-3 p-4 bg-pastel-purple-light border-l-4 border-pastel-purple rounded-xl hover:shadow-card transition-all">
-                      <Repeat className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-gray-500">{reminder.title}</span>
-                        </div>
-                        <div className="text-sm text-gray-600 flex items-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          <span>{reminder.time}{reminder.end_time && ` - ${reminder.end_time}`}</span>
+                    <div key={reminder.id} className="flex items-center gap-2 p-3 bg-pastel-purple-light border-l-3 border-pastel-purple rounded-lg hover:shadow-md transition-all group">
+                      <Repeat className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
+                          <span className="text-xs text-gray-500">• {reminder.time}</span>
                         </div>
                         {reminder.description && (
-                          <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
+                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{reminder.description}</p>
                         )}
                       </div>
                       <button
                         onClick={(e) => {e.stopPropagation(); dismissNotification(reminder.id, 'recurring');}}
-                        className="text-gray-500 hover:text-gray-500 p-2 flex-shrink-0 hover:bg-gray-100 rounded-lg transition-all"
+                        className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                         title="Dismiss"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -2178,41 +2586,44 @@ const StudyTrackerApp = ({ session }) => {
                     .map((suggestion, i) => (
                     <div 
                       key={i} 
-                      className={`flex items-start gap-3 p-4 rounded-xl border-l-4 hover:shadow-card transition-all ${
+                      className={`flex items-center gap-2 p-3 rounded-lg border-l-3 hover:shadow-md transition-all group ${
                         suggestion.priority === 'high' 
                           ? 'bg-pastel-pink-light border-pastel-coral' 
                           : 'bg-pastel-blue-light border-pastel-blue'
                       }`}
                     >
                       {suggestion.priority === 'high' ? (
-                        <AlertCircle className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                        <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
                       ) : (
-                        <Book className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                        <Book className="w-4 h-4 text-blue-600 flex-shrink-0" />
                       )}
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
                           {suggestion.priority === 'high' && (
-                            <span className="px-2 py-0.5 bg-pastel-coral text-red-700 text-xs font-semibold rounded-full shadow-soft">URGENT</span>
+                            <span className="px-1.5 py-0.5 bg-pastel-coral text-red-700 text-[10px] font-semibold rounded uppercase">Urgent</span>
                           )}
-                          <span className="font-semibold text-gray-500">{suggestion.message}</span>
+                          <span className="font-medium text-sm text-gray-900">{suggestion.message}</span>
                         </div>
-                        <p className="text-sm text-gray-600">{suggestion.details}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">{suggestion.details}</p>
                         {suggestion.chapters && suggestion.chapters.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {suggestion.chapters.map((ch, idx) => (
-                              <span key={idx} className="px-2 py-0.5 bg-white border border-gray-200 rounded text-xs text-gray-500">
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {suggestion.chapters.slice(0, 3).map((ch, idx) => (
+                              <span key={idx} className="px-1.5 py-0.5 bg-white text-[10px] text-gray-600 rounded">
                                 {ch}
                               </span>
                             ))}
+                            {suggestion.chapters.length > 3 && (
+                              <span className="text-[10px] text-gray-500">+{suggestion.chapters.length - 3}</span>
+                            )}
                           </div>
                         )}
                       </div>
                       <button
                         onClick={() => dismissNotification(i, 'suggestion')}
-                        className="text-gray-500 hover:text-gray-500 p-1 flex-shrink-0"
+                        className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                         title="Dismiss"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -2228,7 +2639,7 @@ const StudyTrackerApp = ({ session }) => {
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-6 h-6 text-gray-500" />
-                    <h2 className="text-2xl font-semibold text-gray-500">Today's Tasks</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">Today's Tasks</h2>
                   </div>
                   <button
                     onClick={() => startVoiceInput((text) => {
@@ -2290,11 +2701,11 @@ const StudyTrackerApp = ({ session }) => {
                     {!newTask.taskType && (
                       <select
                         value={newTask.subject}
-                        onChange={(e) => setNewTask({ ...newTask, subject: e.target.value })}
+                        onChange={(e) => setNewTask({ ...newTask, subject: e.target.value, chapter: '' })}
                         className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-accent-purple focus:border-transparent shadow-soft"
                       >
                         <option value="">Select Subject</option>
-                        {subjects.map(s => (
+                        {profileSubjects.map(s => (
                           <option key={s.id} value={s.name}>{s.name}</option>
                         ))}
                       </select>
@@ -2308,8 +2719,8 @@ const StudyTrackerApp = ({ session }) => {
                         className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-accent-purple focus:border-transparent shadow-soft"
                       >
                         <option value="">Select Chapter (Optional)</option>
-                        {subjects.find(s => s.name === newTask.subject)?.chapters?.map((ch, i) => (
-                          <option key={i} value={ch}>{ch}</option>
+                        {getChapterNamesForSubject(newTask.subject).map((chapterName, i) => (
+                          <option key={i} value={chapterName}>{chapterName}</option>
                         ))}
                       </select>
                     )}
@@ -2510,7 +2921,7 @@ const StudyTrackerApp = ({ session }) => {
                   <div className="flex items-center gap-3">
                     <Bell className="w-6 h-6 text-gray-500" />
                     <div>
-                      <h2 className="text-2xl font-semibold text-gray-500">Reminders</h2>
+                      <h2 className="text-lg font-semibold text-gray-900">Reminders</h2>
                       {notificationsMinimized && (
                         <p className="text-xs text-gray-600">
                           {getCombinedReminders().length} total reminders
@@ -3027,7 +3438,7 @@ const StudyTrackerApp = ({ session }) => {
         {activeView === 'subjects' && (
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-500">Subjects & Chapters</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Subjects & Chapters</h2>
               <button
                 onClick={() => setShowAddSubject(true)}
                 className="bg-indigo-400 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 flex items-center gap-2 shadow-md transition-all"
@@ -3187,31 +3598,140 @@ const StudyTrackerApp = ({ session }) => {
                 {/* Content */}
                 <div className="p-5">
                   <div className="space-y-2 mb-4">
-                    {viewingSubject.chapters?.map((chapter, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-white rounded-lg group hover:shadow-md transition-all">
-                        <div className="flex items-center gap-2">
-                          <div className="bg-indigo-400 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold">
-                            {i + 1}
-                          </div>
-                          <span className="text-gray-500 font-medium">{chapter}</span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            const updated = subjects.map(s => 
-                              s.id === viewingSubject.id 
-                                ? { ...s, chapters: s.chapters.filter((_, idx) => idx !== i) }
-                                : s
-                            );
-                            setSubjects(updated);
-                            saveData('subjects', updated);
-                            setViewingSubject({ ...viewingSubject, chapters: viewingSubject.chapters.filter((_, idx) => idx !== i) });
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-500 transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                    {(() => {
+                      const trackingMode = activeProfile?.chapter_tracking_mode || 'smart';
+                      const normalizedSubject = normalizeSubjectChapters(viewingSubject);
+                      const chapters = normalizedSubject.chapters || [];
+                      
+                      return chapters.map((chapter, i) => {
+                        const chapterName = typeof chapter === 'string' ? chapter : chapter.name;
+                        
+                        if (trackingMode === 'smart') {
+                          // Smart Tracking Mode - Simple checkbox with auto metadata
+                          const normalizedChapter = normalizeChapter(chapter, 'smart');
+                          return (
+                            <div key={i} className="p-3 bg-white rounded-lg group hover:shadow-md transition-all">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 flex-1">
+                                  <button
+                                    onClick={() => toggleChapterCompletion(viewingSubject.id, i)}
+                                    className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                      normalizedChapter.completed
+                                        ? 'bg-green-400 border-green-400'
+                                        : 'border-gray-300 hover:border-indigo-400'
+                                    }`}
+                                  >
+                                    {normalizedChapter.completed && <Check className="w-4 h-4 text-white" />}
+                                  </button>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-medium ${
+                                        normalizedChapter.completed
+                                          ? 'text-gray-400 line-through'
+                                          : 'text-gray-700'
+                                      }`}>
+                                        {chapterName}
+                                      </span>
+                                      {normalizedChapter.completed && (
+                                        <span className="text-xs text-green-600 font-semibold">✓ Done</span>
+                                      )}
+                                    </div>
+                                    {(normalizedChapter.lastStudied || normalizedChapter.taskCount > 0 || normalizedChapter.studyTime > 0) && (
+                                      <div className="text-xs text-gray-500 mt-1 flex items-center gap-3">
+                                        {normalizedChapter.lastStudied && (
+                                          <span>📅 Last: {new Date(normalizedChapter.lastStudied).toLocaleDateString()}</span>
+                                        )}
+                                        {normalizedChapter.taskCount > 0 && (
+                                          <span>📝 {normalizedChapter.taskCount} tasks</span>
+                                        )}
+                                        {normalizedChapter.studyTime > 0 && (
+                                          <span>⏱️ {normalizedChapter.studyTime} min</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const updated = subjects.map(s => 
+                                      s.id === viewingSubject.id 
+                                        ? { ...s, chapters: s.chapters.filter((_, idx) => idx !== i) }
+                                        : s
+                                    );
+                                    setSubjects(updated);
+                                    saveData('subjects', updated);
+                                    setViewingSubject({ ...viewingSubject, chapters: viewingSubject.chapters.filter((_, idx) => idx !== i) });
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-500 transition-all ml-2"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // Comprehensive Tracking Mode - Full manual tracking
+                          const normalizedChapter = normalizeChapter(chapter, 'comprehensive');
+                          const statusColor = {
+                            pending: 'bg-gray-100 text-gray-600 border-gray-300',
+                            started: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+                            completed: 'bg-green-100 text-green-700 border-green-300'
+                          }[normalizedChapter.status];
+                          
+                          return (
+                            <div key={i} className={`p-3 bg-white rounded-lg border-2 group hover:shadow-md transition-all ${statusColor}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2 flex-1">
+                                  <span className="font-semibold text-gray-800">{i + 1}. {chapterName}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={normalizedChapter.status}
+                                    onChange={(e) => updateSubjectChapterStatus(viewingSubject.id, i, e.target.value)}
+                                    className="text-xs px-2 py-1 rounded-lg border-2 font-semibold focus:ring-2 focus:ring-indigo-400 bg-white"
+                                  >
+                                    <option value="pending">📋 Pending</option>
+                                    <option value="started">📖 Started</option>
+                                    <option value="completed">✅ Completed</option>
+                                  </select>
+                                  <button
+                                    onClick={() => {
+                                      const updated = subjects.map(s => 
+                                        s.id === viewingSubject.id 
+                                          ? { ...s, chapters: s.chapters.filter((_, idx) => idx !== i) }
+                                          : s
+                                      );
+                                      setSubjects(updated);
+                                      saveData('subjects', updated);
+                                      setViewingSubject({ ...viewingSubject, chapters: viewingSubject.chapters.filter((_, idx) => idx !== i) });
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-500 transition-all"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="bg-white/50 px-2 py-1 rounded">
+                                  📝 <strong>{normalizedChapter.taskCount}</strong> tasks
+                                </div>
+                                <div className="bg-white/50 px-2 py-1 rounded">
+                                  ⏱️ <strong>{normalizedChapter.studyTime}</strong> min
+                                </div>
+                                {normalizedChapter.lastStudied && (
+                                  <div className="bg-white/50 px-2 py-1 rounded col-span-2">
+                                    📅 Last: <strong>{new Date(normalizedChapter.lastStudied).toLocaleDateString()}</strong>
+                                  </div>
+                                )}
+                                <div className="bg-white/50 px-2 py-1 rounded">
+                                  🔄 Revisions: <strong>{normalizedChapter.revisionsCompleted}/{normalizedChapter.revisionsNeeded}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      });
+                    })()}
                     
                     {(!viewingSubject.chapters || viewingSubject.chapters.length === 0) && (
                       <p className="text-gray-500 text-center py-6 italic">No chapters added yet</p>
@@ -3282,7 +3802,7 @@ const StudyTrackerApp = ({ session }) => {
           <div className="space-y-6">
             {/* Header with Add Exam Button */}
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold text-gray-500 flex items-center gap-2">
+              <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
                 <Book className="w-7 h-7 text-indigo-600" />
                 Exam Management
               </h2>
@@ -3432,7 +3952,7 @@ const StudyTrackerApp = ({ session }) => {
 
             <div className="bg-white rounded-lg shadow-lg p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-500">Upcoming Exams</h2>
+                <h2 className="text-xl font-semibold text-gray-900">Upcoming Exams</h2>
                 <button
                   onClick={() => setShowAddExam(true)}
                   className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
@@ -3458,11 +3978,11 @@ const StudyTrackerApp = ({ session }) => {
                     <div className="space-y-2 mb-3">
                       <select
                         value={newExamSubject.subject}
-                        onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value })}
+                        onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value, chapters: [] })}
                         className="w-full p-2 border rounded-lg"
                       >
                         <option value="">Select Subject</option>
-                        {subjects.map(s => (
+                        {profileSubjects.map(s => (
                           <option key={s.id} value={s.name}>{s.name}</option>
                         ))}
                       </select>
@@ -3480,10 +4000,10 @@ const StudyTrackerApp = ({ session }) => {
                         
                         {/* Quick select from subject's chapters */}
                         {newExamSubject.subject && (() => {
-                          const selectedSubject = subjects.find(s => s.name === newExamSubject.subject);
-                          const availableChapters = selectedSubject?.chapters?.filter(
-                            ch => !newExamSubject.chapters.some(ec => ec.name === ch)
-                          ) || [];
+                          const selectedChapters = new Set((newExamSubject.chapters || []).map(ec => ec.name));
+                          const availableChapters = getChapterNamesForSubject(newExamSubject.subject).filter(
+                            chapterName => !selectedChapters.has(chapterName)
+                          );
                           
                           return availableChapters.length > 0 && (
                             <select
@@ -3499,8 +4019,8 @@ const StudyTrackerApp = ({ session }) => {
                               className="w-full p-2 border rounded-lg mb-2 bg-white"
                             >
                               <option value="">Quick add from {newExamSubject.subject}...</option>
-                              {availableChapters.map((ch, i) => (
-                                <option key={i} value={ch}>{ch}</option>
+                              {availableChapters.map((chapterName, i) => (
+                                <option key={i} value={chapterName}>{chapterName}</option>
                               ))}
                             </select>
                           );
@@ -3996,10 +4516,10 @@ const StudyTrackerApp = ({ session }) => {
                                   <div className="space-y-2 mb-2">
                                     {/* Quick select from subject's chapters */}
                                     {(() => {
-                                      const subjectData = subjects.find(s => s.name === subject.subject);
-                                      const availableChapters = subjectData?.chapters?.filter(
-                                        ch => !subject.chapters?.some(ec => ec.name === ch)
-                                      ) || [];
+                                      const selectedChapters = new Set((subject.chapters || []).map(ch => ch?.name));
+                                      const availableChapters = getChapterNamesForSubject(subject.subject).filter(
+                                        (chapterName) => !selectedChapters.has(chapterName)
+                                      );
                                       
                                       return availableChapters.length > 0 && (
                                         <div>
@@ -4015,8 +4535,8 @@ const StudyTrackerApp = ({ session }) => {
                                             className="w-full p-1.5 text-sm border rounded bg-white"
                                           >
                                             <option value="">Select a chapter...</option>
-                                            {availableChapters.map((ch, i) => (
-                                              <option key={i} value={ch}>{ch}</option>
+                                            {availableChapters.map((chapterName, i) => (
+                                              <option key={i} value={chapterName}>{chapterName}</option>
                                             ))}
                                           </select>
                                         </div>
@@ -4100,12 +4620,12 @@ const StudyTrackerApp = ({ session }) => {
                             <div className="space-y-3">
                               <select
                                 value={newExamSubject.subject}
-                                onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value })}
+                                onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value, chapters: [] })}
                                 onClick={(e) => e.stopPropagation()}
                                 className="w-full p-2 border rounded-lg text-sm"
                               >
                                 <option value="">Select a subject...</option>
-                                {subjects.map(s => (
+                                {profileSubjects.map(s => (
                                   <option key={s.id} value={s.name}>{s.name}</option>
                                 ))}
                               </select>
@@ -4124,10 +4644,10 @@ const StudyTrackerApp = ({ session }) => {
                                 
                                 {/* Quick select from subject's chapters */}
                                 {newExamSubject.subject && (() => {
-                                  const selectedSubject = subjects.find(s => s.name === newExamSubject.subject);
-                                  const availableChapters = selectedSubject?.chapters?.filter(
-                                    ch => !newExamSubject.chapters.some(ec => ec.name === ch)
-                                  ) || [];
+                                  const selectedChapters = new Set((newExamSubject.chapters || []).map(ec => ec.name));
+                                  const availableChapters = getChapterNamesForSubject(newExamSubject.subject).filter(
+                                    chapterName => !selectedChapters.has(chapterName)
+                                  );
                                   
                                   return availableChapters.length > 0 && (
                                     <div className="mb-2">
@@ -4146,8 +4666,8 @@ const StudyTrackerApp = ({ session }) => {
                                         className="w-full p-1.5 border rounded-lg bg-white text-sm"
                                       >
                                         <option value="">Select a chapter...</option>
-                                        {availableChapters.map((ch, i) => (
-                                          <option key={i} value={ch}>{ch}</option>
+                                        {availableChapters.map((chapterName, i) => (
+                                          <option key={i} value={chapterName}>{chapterName}</option>
                                         ))}
                                       </select>
                                     </div>
@@ -4224,17 +4744,12 @@ const StudyTrackerApp = ({ session }) => {
                               />
                               
                               <button
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  if (newExamSubject.subject && newExamSubject.date) {
-                                    const updatedSubjects = [...exam.subjects, newExamSubject];
-                                    updateExam(exam.id, { subjects: updatedSubjects });
-                                    setNewExamSubject({ subject: '', date: '', chapters: [], keyPoints: '' });
-                                    setExamChapterInput('');
-                                  }
+                                  await addSubjectToExistingExam(exam.id);
                                 }}
                                 className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-medium"
-                                disabled={!newExamSubject.subject || !newExamSubject.date}
+                                disabled={!newExamSubject.subject}
                               >
                                 + Add {newExamSubject.subject ? `"${newExamSubject.subject}"` : 'Subject'} to {exam.name}
                               </button>
@@ -4426,6 +4941,230 @@ const StudyTrackerApp = ({ session }) => {
                 Last 14 days
               </div>
             </div>
+
+            {/* Exam Analytics Section */}
+            {(() => {
+              const examAnalytics = getExamAnalytics();
+              
+              if (examAnalytics.totalExamsWithMarks === 0) {
+                return (
+                  <div className="bg-white rounded-lg shadow-lg p-6">
+                    <h2 className="text-xl font-semibold text-gray-500 mb-4 flex items-center gap-2">
+                      <TrendingUp className="w-6 h-6 text-purple-600" />
+                      Exam Performance Analytics
+                    </h2>
+                    <p className="text-gray-500 text-center py-8">
+                      No exam results available yet. Add marks to your completed exams to see analytics!
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <>
+                  {/* Compact Overall Performance Summary */}
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg shadow-lg p-4 border-2 border-purple-200">
+                    <h2 className="text-lg font-semibold text-gray-500 mb-3 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-purple-600" />
+                      Exam Performance Analytics
+                    </h2>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="text-center p-3 bg-white rounded-lg">
+                        <div className="text-2xl font-bold text-purple-600">{examAnalytics.totalExamsWithMarks}</div>
+                        <div className="text-[10px] text-gray-600 mt-1">Exams</div>
+                      </div>
+                      <div className="text-center p-3 bg-white rounded-lg">
+                        <div className="text-2xl font-bold text-indigo-600">{examAnalytics.overallAverage}%</div>
+                        <div className="text-[10px] text-gray-600 mt-1">Overall Avg</div>
+                      </div>
+                      <div className="text-center p-3 bg-white rounded-lg">
+                        <div className={`text-2xl font-bold ${
+                          examAnalytics.overallAverage >= 90 ? 'text-green-600' :
+                          examAnalytics.overallAverage >= 75 ? 'text-blue-600' :
+                          examAnalytics.overallAverage >= 60 ? 'text-yellow-600' :
+                          'text-orange-600'
+                        }`}>
+                          {examAnalytics.overallAverage >= 90 ? 'A+' :
+                           examAnalytics.overallAverage >= 80 ? 'A' :
+                           examAnalytics.overallAverage >= 70 ? 'B' :
+                           examAnalytics.overallAverage >= 60 ? 'C' : 'D'}
+                        </div>
+                        <div className="text-[10px] text-gray-600 mt-1">Grade</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Compact Subject Performance Line Charts */}
+                  {examAnalytics.subjectPerformance.length > 0 && (
+                    <div className="bg-white rounded-lg shadow-lg p-4">
+                      <h3 className="text-base font-semibold text-gray-500 mb-3 flex items-center gap-2">
+                        <LineChart className="w-5 h-5 text-indigo-600" />
+                        Subject Trends Across Exams
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {examAnalytics.subjectPerformance
+                          .sort((a, b) => b.average - a.average)
+                          .map((subject, idx) => {
+                            const maxMark = Math.max(...subject.exams.map(e => e.marks));
+                            const minMark = Math.min(...subject.exams.map(e => e.marks));
+                            
+                            return (
+                              <div key={idx} className="border border-gray-200 rounded-lg p-3 hover:border-indigo-300 transition-colors">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-sm text-gray-700">{subject.name}</h4>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className={`text-xs font-bold ${
+                                        subject.average >= 90 ? 'text-green-600' :
+                                        subject.average >= 75 ? 'text-blue-600' :
+                                        'text-gray-600'
+                                      }`}>
+                                        {subject.average}% avg
+                                      </span>
+                                      {subject.trend !== 0 && (
+                                        <span className={`text-xs font-semibold ${
+                                          subject.trend > 0 ? 'text-green-600' : 'text-red-600'
+                                        }`}>
+                                          {subject.trend > 0 ? '↗' : '↘'} {Math.abs(subject.trend).toFixed(1)}%
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {minMark}% - {maxMark}%
+                                  </div>
+                                </div>
+                                
+                                {/* Simple Line Chart */}
+                                <div className="relative h-20 mt-2">
+                                  <svg className="w-full h-full" viewBox="0 0 200 80" preserveAspectRatio="none">
+                                    {/* Grid lines */}
+                                    <line x1="0" y1="20" x2="200" y2="20" stroke="#e5e7eb" strokeWidth="0.5" />
+                                    <line x1="0" y1="40" x2="200" y2="40" stroke="#e5e7eb" strokeWidth="0.5" />
+                                    <line x1="0" y1="60" x2="200" y2="60" stroke="#e5e7eb" strokeWidth="0.5" />
+                                    
+                                    {/* Line chart */}
+                                    <polyline
+                                      points={subject.exams.map((exam, i) => {
+                                        const x = (i / Math.max(subject.exams.length - 1, 1)) * 200;
+                                        const y = 80 - (exam.marks / 100) * 80;
+                                        return `${x},${y}`;
+                                      }).join(' ')}
+                                      fill="none"
+                                      stroke={
+                                        subject.average >= 90 ? '#10b981' :
+                                        subject.average >= 75 ? '#3b82f6' :
+                                        subject.average >= 60 ? '#eab308' :
+                                        '#f97316'
+                                      }
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                    
+                                    {/* Data points */}
+                                    {subject.exams.map((exam, i) => {
+                                      const x = (i / Math.max(subject.exams.length - 1, 1)) * 200;
+                                      const y = 80 - (exam.marks / 100) * 80;
+                                      return (
+                                        <circle
+                                          key={i}
+                                          cx={x}
+                                          cy={y}
+                                          r="3"
+                                          fill={
+                                            exam.marks >= 90 ? '#10b981' :
+                                            exam.marks >= 75 ? '#3b82f6' :
+                                            exam.marks >= 60 ? '#eab308' :
+                                            '#f97316'
+                                          }
+                                          stroke="white"
+                                          strokeWidth="1"
+                                        />
+                                      );
+                                    })}
+                                  </svg>
+                                  
+                                  {/* Y-axis labels */}
+                                  <div className="absolute left-0 top-0 text-[9px] text-gray-400">100%</div>
+                                  <div className="absolute left-0 bottom-0 text-[9px] text-gray-400">0%</div>
+                                </div>
+                                
+                                {/* Exam labels */}
+                                <div className="flex justify-between mt-1 text-[9px] text-gray-500">
+                                  {subject.exams.map((exam, i) => (
+                                    <span key={i} className="truncate" style={{ maxWidth: `${100 / subject.exams.length}%` }}>
+                                      {exam.marks}%
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Compact Exam Averages */}
+                  <div className="bg-white rounded-lg shadow-lg p-4">
+                    <h3 className="text-base font-semibold text-gray-500 mb-3 flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-blue-600" />
+                      Exam Averages
+                    </h3>
+                    <div className="space-y-2">
+                      {examAnalytics.examAverages.map((exam, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-gray-700 truncate">{exam.name}</div>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                              <div
+                                className={`h-2 rounded-full transition-all ${
+                                  exam.average >= 90 ? 'bg-green-500' :
+                                  exam.average >= 75 ? 'bg-blue-500' :
+                                  exam.average >= 60 ? 'bg-yellow-500' :
+                                  'bg-orange-500'
+                                }`}
+                                style={{ width: `${exam.average}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className={`text-sm font-bold px-2 py-1 rounded whitespace-nowrap ${
+                            exam.average >= 90 ? 'bg-green-100 text-green-700' :
+                            exam.average >= 75 ? 'bg-blue-100 text-blue-700' :
+                            exam.average >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-orange-100 text-orange-700'
+                          }`}>
+                            {exam.average}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Performance Legend - Compact */}
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 bg-green-500 rounded"></div>
+                        <span>90%+ Excellent</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                        <span>75-89% Good</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+                        <span>60-74% Average</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                        <span>&lt;60% Needs Work</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 

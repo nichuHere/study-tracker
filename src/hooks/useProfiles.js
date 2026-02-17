@@ -13,7 +13,7 @@ export const useProfiles = (session) => {
   const [tempAccountName, setTempAccountName] = useState('');
   const [profileTab, setProfileTab] = useState('kids');
   const [editingProfile, setEditingProfile] = useState(null);
-  const [editProfileData, setEditProfileData] = useState({ name: '', class: '' });
+  const [editProfileData, setEditProfileData] = useState({ name: '', class: '', chapter_tracking_mode: 'smart' });
   const [deletingProfileId, setDeletingProfileId] = useState(null);
 
   // Load account name from localStorage
@@ -54,7 +54,8 @@ export const useProfiles = (session) => {
         .insert([{
           user_id: session.user.id,
           name: newProfileName,
-          class: newProfileClass
+          class: newProfileClass,
+          chapter_tracking_mode: 'smart' // Default to Option 5 (smart tracking)
         }])
         .select();
 
@@ -83,7 +84,8 @@ export const useProfiles = (session) => {
         .from('profiles')
         .update({
           name: editProfileData.name,
-          class: editProfileData.class
+          class: editProfileData.class,
+          chapter_tracking_mode: editProfileData.chapter_tracking_mode
         })
         .eq('id', editingProfile);
 
@@ -94,17 +96,22 @@ export const useProfiles = (session) => {
 
       const updatedProfiles = profiles.map(p =>
         p.id === editingProfile
-          ? { ...p, name: editProfileData.name, class: editProfileData.class }
+          ? { ...p, name: editProfileData.name, class: editProfileData.class, chapter_tracking_mode: editProfileData.chapter_tracking_mode }
           : p
       );
       setProfiles(updatedProfiles);
 
       if (activeProfile?.id === editingProfile) {
-        setActiveProfile({ ...activeProfile, name: editProfileData.name, class: editProfileData.class });
+        setActiveProfile({ 
+          ...activeProfile, 
+          name: editProfileData.name, 
+          class: editProfileData.class,
+          chapter_tracking_mode: editProfileData.chapter_tracking_mode
+        });
       }
 
       setEditingProfile(null);
-      setEditProfileData({ name: '', class: '' });
+      setEditProfileData({ name: '', class: '', chapter_tracking_mode: 'smart' });
     }
   };
 
@@ -140,13 +147,17 @@ export const useProfiles = (session) => {
   // Start editing profile
   const startEditProfile = (profile) => {
     setEditingProfile(profile.id);
-    setEditProfileData({ name: profile.name, class: profile.class });
+    setEditProfileData({ 
+      name: profile.name, 
+      class: profile.class,
+      chapter_tracking_mode: profile.chapter_tracking_mode || 'smart'
+    });
   };
 
   // Cancel editing
   const cancelEditProfile = () => {
     setEditingProfile(null);
-    setEditProfileData({ name: '', class: '' });
+    setEditProfileData({ name: '', class: '', chapter_tracking_mode: 'smart' });
   };
 
   // Load profiles on mount

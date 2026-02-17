@@ -202,14 +202,37 @@ const EXAM_SCORE_BONUSES = [
 /**
  * Calculate total points for a profile based on their activity
  * 
- * Simplified Points System:
- * - Task completed: 10 pts
- * - Study time: 1 pt/min
- * - Badge unlock: 50-500 pts (tier-based)
- * - Completion milestone: 50-500 pts
- * - Daily streak: 25 pts/day
- * - Streak bonuses: 200 pts (7 days), 400 pts (14 days), 1000 pts (30 days)
- * - Exam scores: 100 pts (>90%), 200 pts (>95%), 300 pts (100%)
+ * POINTS SYSTEM BREAKDOWN:
+ * 
+ * 1. TASK COMPLETION: 10 pts per completed task
+ * 
+ * 2. STUDY TIME: 1 pt per minute studied
+ * 
+ * 3. BADGES: Based on tier
+ *    - Common: 50 pts
+ *    - Rare: 100 pts
+ *    - Epic: 200 pts
+ *    - Legendary: 500 pts
+ * 
+ * 4. COMPLETION MILESTONES: Based on % of tasks completed (only past/today tasks)
+ *    - 50%: 50 pts
+ *    - 75%: 100 pts
+ *    - 90%: 200 pts
+ *    - 100%: 500 pts
+ * 
+ * 5. DAILY STREAKS: 25 pts per consecutive day
+ * 
+ * 6. STREAK BONUSES: (Cumulative - you get all bonuses you qualify for)
+ *    - 7-day streak: +200 pts bonus
+ *    - 14-day streak: +400 pts bonus (in addition to 7-day)
+ *    - 30-day streak: +1000 pts bonus (in addition to 7-day and 14-day)
+ *    Example: 30-day streak = (30 × 25) + 200 + 400 + 1000 = 2350 total
+ * 
+ * 7. EXAM BONUSES: Per subject in each exam
+ *    - 90-94%: 100 pts per subject
+ *    - 95-99%: 200 pts per subject
+ *    - 100%: 300 pts per subject
+ *    Note: If you have 5 subjects and score 100% in all, you get 5 × 300 = 1500 pts
  * 
  * @param {Object} profile - User profile
  * @param {Array} tasks - All tasks for this profile
@@ -235,14 +258,21 @@ export const calculatePoints = (profile, tasks = [], badges = [], exams = []) =>
   }, 0);
   totalPoints += badgePoints;
   
-  // 4. Completion Milestone Points
-  const allTasksCount = tasks.length;
-  const completedCount = completedTasks.length;
-  const completionRate = allTasksCount > 0 
-    ? Math.round((completedCount / allTasksCount) * 100)
+  // 4. Completion Milestone Points (FIXED: Only count tasks up to today, not future tasks)
+  const today = getTodayDateIST();
+  const pastAndTodayTasks = tasks.filter(t => t.date <= today);
+  const pastCompletedTasks = pastAndTodayTasks.filter(t => t.completed);
+  
+  const relevantTasksCount = pastAndTodayTasks.length;
+  const relevantCompletedCount = pastCompletedTasks.length;
+  const completionRate = relevantTasksCount > 0 
+    ? Math.round((relevantCompletedCount / relevantTasksCount) * 100)
     : 0;
   
-  const milestone = COMPLETION_MILESTONES.find(m => completionRate >= m.threshold);
+  // Only award milestone if there are at least 10 tasks to prevent gaming the system
+  const milestone = relevantTasksCount >= 10 
+    ? COMPLETION_MILESTONES.find(m => completionRate >= m.threshold)
+    : null;
   if (milestone) {
     totalPoints += milestone.points;
   }
@@ -251,13 +281,13 @@ export const calculatePoints = (profile, tasks = [], badges = [], exams = []) =>
   const streak = calculateStreak(tasks);
   totalPoints += streak * 25;
   
-  // 6. Streak Milestone Bonuses (7-day, 14-day, 30-day bonuses)
+  // 6. Streak Milestone Bonuses (CUMULATIVE - you earn all bonuses you qualify for)
   const streakBonus = STREAK_MILESTONES
     .filter(sm => streak >= sm.days)
     .reduce((sum, sm) => sum + sm.bonus, 0);
   totalPoints += streakBonus;
   
-  // 7. Exam Score Bonuses (>90%, >95%, 100%)
+  // 7. Exam Score Bonuses (per subject - can add up significantly)
   const examBonusPoints = calculateExamBonuses(exams);
   totalPoints += examBonusPoints;
   
@@ -336,13 +366,20 @@ export const getPointsBreakdown = (profile, tasks = [], badges = [], exams = [])
   const completedTasks = tasks.filter(t => t.completed);
   const totalStudyMinutes = completedTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
   
-  const allTasksCount = tasks.length;
-  const completedCount = completedTasks.length;
-  const completionRate = allTasksCount > 0 
-    ? Math.round((completedCount / allTasksCount) * 100)
+  // Use same logic as calculatePoints - only past and today's tasks
+  const today = getTodayDateIST();
+  const pastAndTodayTasks = tasks.filter(t => t.date <= today);
+  const pastCompletedTasks = pastAndTodayTasks.filter(t => t.completed);
+  
+  const relevantTasksCount = pastAndTodayTasks.length;
+  const relevantCompletedCount = pastCompletedTasks.length;
+  const completionRate = relevantTasksCount > 0 
+    ? Math.round((relevantCompletedCount / relevantTasksCount) * 100)
     : 0;
   
-  const milestone = COMPLETION_MILESTONES.find(m => completionRate >= m.threshold);
+  const milestone = relevantTasksCount >= 10 
+    ? COMPLETION_MILESTONES.find(m => completionRate >= m.threshold)
+    : null;
   const streak = calculateStreak(tasks);
   
   const badgePoints = badges.reduce((sum, badge) => {
@@ -393,9 +430,13 @@ export const getPointsBreakdown = (profile, tasks = [], badges = [], exams = [])
     total: calculatePoints(profile, tasks, badges, exams),
     breakdown: {
       completedTasks: completedTasks.length,
+      totalTasks: tasks.length,
+      relevantTasks: relevantTasksCount,
+      relevantCompleted: relevantCompletedCount,
       studyMinutes: totalStudyMinutes,
       unlockedBadges: badges.length,
       completionRate: completionRate,
+      completionMilestoneQualified: relevantTasksCount >= 10,
       streak: streak,
       streakMilestones: earnedMilestones,
       examCount: examCount,

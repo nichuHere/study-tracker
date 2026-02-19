@@ -58,22 +58,15 @@ const Auth = () => {
         }
       } else {
         // Log In
+        // Set remember me preference BEFORE login so storage is configured correctly
+        setRememberMe(rememberMe);
+        
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
         if (error) throw error;
-
-        // Handle "Remember Me"
-        if (!rememberMe) {
-          // Set session to expire when browser closes
-          // Note: Supabase handles session persistence by default
-          // For "don't remember", we'll clear session on window close
-          window.addEventListener('beforeunload', async () => {
-            await supabase.auth.signOut();
-          });
-        }
 
         setMessage({ type: 'success', text: 'Successfully logged in!' });
       }

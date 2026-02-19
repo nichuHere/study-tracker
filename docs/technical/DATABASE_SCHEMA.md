@@ -287,8 +287,36 @@ USING (bucket_id = 'school-documents' AND auth.uid()::text = (storage.foldername
 
 ---
 
+## SQL File Conventions
+
+**All SQL files MUST be created in the `database/` folder.**
+
+### Folder Structure
+```
+database/
+├── README.md           # Setup instructions & execution order
+├── schema/             # Core table definitions
+│   ├── supabase-schema.sql
+│   └── supabase-school-docs-schema.sql
+└── migrations/         # Schema updates & additions
+    ├── supabase-auth-migration.sql
+    ├── supabase-general-tasks-migration.sql
+    ├── supabase-chapter-tracking-mode-migration.sql
+    └── supabase-task-rollover-migration.sql
+```
+
+### Rules for New SQL Files
+1. **New tables** → `database/schema/supabase-{feature}-schema.sql`
+2. **Schema changes** → `database/migrations/supabase-{feature}-migration.sql`
+3. **One-time utilities** → Do not commit; run locally and discard
+4. Use `IF NOT EXISTS` / `IF EXISTS` for idempotent scripts
+5. Include RLS policies in the same file as table creation
+
+---
+
 ## Related Documentation
 
 - [AUTHENTICATION.md](../features/AUTHENTICATION.md) - Auth integration
-- [supabase-schema.sql](../../supabase-schema.sql) - Base schema
-- [supabase-auth-migration.sql](../../supabase-auth-migration.sql) - Auth migration
+- [database/README.md](../../database/README.md) - SQL setup guide
+- [database/schema/](../../database/schema/) - Base schemas
+- [database/migrations/](../../database/migrations/) - Migration scripts

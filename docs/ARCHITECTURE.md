@@ -81,8 +81,11 @@ StudyTrackerApp/
 │   ├── ARCHITECTURE.md       # This file
 │   ├── features/             # Feature specifications
 │   └── technical/            # Technical specifications
+├── database/                 # SQL files (ALL SQL goes here)
+│   ├── README.md             # Setup instructions
+│   ├── schema/               # Core table definitions
+│   └── migrations/           # Schema updates & additions
 ├── build/                    # Production build
-└── [SQL migration files]     # Database migrations
 ```
 
 ---

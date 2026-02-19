@@ -1620,11 +1620,11 @@ const StudyTrackerApp = ({ session }) => {
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             {/* Logo & Profile Switcher */}
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-rose-400 to-purple-500 p-2 rounded-xl shadow-lg">
-                <GraduationCap className="w-6 h-6 text-white" />
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <div className="bg-gradient-to-br from-rose-400 to-purple-500 p-1.5 sm:p-2 rounded-xl shadow-lg">
+                <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent hidden sm:block">
+              <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent hidden md:block">
                 Kannama
               </span>
               {/* Child Selector Dropdown */}
@@ -1632,13 +1632,13 @@ const StudyTrackerApp = ({ session }) => {
                 <div className="relative">
                   <button
                     onClick={() => setShowSidebar(!showSidebar)}
-                    className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-3 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all hover:scale-105"
+                    className="flex items-center gap-1 sm:gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-md hover:shadow-lg transition-all hover:scale-105"
                   >
-                    <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
-                      <User className="w-3.5 h-3.5" />
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 bg-white/20 rounded-full flex items-center justify-center">
+                      <User className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     </div>
-                    <span className="font-medium text-sm">Studying: {activeProfile.name}</span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
+                    <span className="font-medium text-xs sm:text-sm max-w-[60px] sm:max-w-none truncate">{activeProfile.name}</span>
+                    <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 transition-transform flex-shrink-0 ${showSidebar ? 'rotate-180' : ''}`} />
                   </button>
                   
                   {/* Rich Dropdown Menu */}
@@ -1705,41 +1705,43 @@ const StudyTrackerApp = ({ session }) => {
               )}
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex items-center gap-1 bg-white/60 rounded-full px-2 py-1.5 shadow-inner">
-              {[
-                { key: 'dashboard', label: 'Home', icon: Home },
-                { key: 'daily', label: 'Tasks', icon: CheckCircle },
-                { key: 'calendar', label: 'Schedule', icon: Calendar },
-                { key: 'exams', label: 'Exams', icon: FileText },
-                { key: 'subjects', label: 'Subjects', icon: Book },
-                { key: 'analytics', label: 'Analytics', icon: BarChart3 },
-                { key: 'docs', label: 'Docs', icon: FolderOpen },
-              ].map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveView(key)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                    activeView === key
-                      ? 'bg-gradient-to-r from-rose-500 to-purple-500 text-white shadow-md'
-                      : 'text-gray-600 hover:bg-white hover:text-rose-600'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden md:inline">{label}</span>
-                </button>
-              ))}
+            {/* Navigation Tabs - Scrollable on mobile */}
+            <div className="flex-1 overflow-x-auto scrollbar-hide mx-2 md:mx-4">
+              <div className="flex items-center gap-1 bg-white/60 rounded-full px-2 py-1.5 shadow-inner w-max min-w-full md:w-auto md:min-w-0 md:justify-center">
+                {[
+                  { key: 'dashboard', label: 'Home', icon: Home },
+                  { key: 'daily', label: 'Tasks', icon: CheckCircle },
+                  { key: 'calendar', label: 'Schedule', icon: Calendar },
+                  { key: 'exams', label: 'Exams', icon: FileText },
+                  { key: 'subjects', label: 'Subjects', icon: Book },
+                  { key: 'analytics', label: 'Stats', icon: BarChart3 },
+                  { key: 'docs', label: 'Docs', icon: FolderOpen },
+                ].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveView(key)}
+                    className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                      activeView === key
+                        ? 'bg-gradient-to-r from-rose-500 to-purple-500 text-white shadow-md'
+                        : 'text-gray-600 hover:bg-white hover:text-rose-600'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Right side - Notifications, Profile */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               {/* Notifications */}
               <div className="relative">
                 <button 
                   onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
-                  className="relative p-2 bg-white/70 rounded-full hover:bg-white transition-colors shadow-sm"
+                  className="relative p-1.5 sm:p-2 bg-white/70 rounded-full hover:bg-white transition-colors shadow-sm"
                 >
-                  <Bell className="w-5 h-5 text-gray-600" />
+                  <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
                   {(getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
                     getTodaysReminders().filter(r => !isNotificationDismissed(r.id, 'reminder')).length + 
                     getTodaysRecurringReminders().filter(r => !isNotificationDismissed(r.id, 'recurring')).length) > 0 && (
@@ -1755,7 +1757,7 @@ const StudyTrackerApp = ({ session }) => {
                 {showNotificationsDropdown && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowNotificationsDropdown(false)} />
-                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 max-h-[70vh] overflow-hidden">
+                    <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 max-h-[70vh] overflow-hidden">
                       <div className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-gray-100">
                         <div className="flex items-center gap-2">
                           <Bell className="w-5 h-5 text-orange-600" />
@@ -1871,10 +1873,10 @@ const StudyTrackerApp = ({ session }) => {
               {/* Profile Dropdown */}
               <button
                 onClick={() => setShowProfileModal(true)}
-                className="flex items-center gap-2 bg-white/70 rounded-full pl-1 pr-3 py-1 hover:bg-white transition-colors shadow-sm"
+                className="flex items-center gap-1 sm:gap-2 bg-white/70 rounded-full pl-1 pr-1.5 sm:pr-3 py-1 hover:bg-white transition-colors shadow-sm"
               >
-                <div className="w-8 h-8 bg-gradient-to-br from-rose-400 to-purple-500 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
+                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-rose-400 to-purple-500 rounded-full flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
                 </div>
                 <span className="text-sm font-medium text-gray-700 hidden sm:block">
                   {accountName || session?.user?.email?.split('@')[0] || 'Account'}
@@ -3604,12 +3606,12 @@ const StudyTrackerApp = ({ session }) => {
 
         {/* Subjects View */}
         {activeView === 'subjects' && (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Subjects & Chapters</h2>
+          <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Subjects & Chapters</h2>
               <button
                 onClick={() => setShowAddSubject(true)}
-                className="bg-indigo-400 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 flex items-center gap-2 shadow-md transition-all"
+                className="bg-indigo-400 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 flex items-center justify-center gap-2 shadow-md transition-all text-sm sm:text-base"
               >
                 <Plus className="w-4 h-4" />
                 Add Subject
@@ -3969,16 +3971,16 @@ const StudyTrackerApp = ({ session }) => {
         {activeView === 'exams' && (
           <div className="space-y-6">
             {/* Header with Add Exam Button */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
-                <Book className="w-7 h-7 text-indigo-600" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 flex items-center gap-2">
+                <Book className="w-6 h-6 sm:w-7 sm:h-7 text-indigo-600" />
                 Exam Management
               </h2>
               <button
                 onClick={() => setShowAddExam(true)}
-                className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 flex items-center gap-2 shadow-lg transition-all"
+                className="bg-indigo-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2 shadow-lg transition-all text-sm sm:text-base"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 Add New Exam
               </button>
             </div>
@@ -5442,14 +5444,14 @@ const StudyTrackerApp = ({ session }) => {
         {/* Calendar View */}
         {activeView === 'calendar' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+            <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 border border-gray-100">
               {/* Calendar Header */}
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-3xl font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-3">
-                  <Calendar className="w-8 h-8 text-indigo-600" />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <h2 className="text-xl sm:text-3xl font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 sm:gap-3">
+                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
                   Calendar
                 </h2>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4">
                   <button
                     onClick={() => {
                       const newMonth = calendarMonth.month === 0 ? 11 : calendarMonth.month - 1;
@@ -5457,11 +5459,11 @@ const StudyTrackerApp = ({ session }) => {
                       setCalendarMonth({ year: newYear, month: newMonth });
                       setSelectedDate(null);
                     }}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                    className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-all"
                   >
-                    <ChevronLeft className="w-6 h-6 text-gray-500" />
+                    <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" />
                   </button>
-                  <div className="text-xl font-semibold text-gray-500 min-w-[200px] text-center">
+                  <div className="text-sm sm:text-xl font-semibold text-gray-500 min-w-[120px] sm:min-w-[200px] text-center">
                     {new Date(calendarMonth.year, calendarMonth.month).toLocaleDateString('en-US', { 
                       month: 'long', 
                       year: 'numeric' 
@@ -5474,9 +5476,9 @@ const StudyTrackerApp = ({ session }) => {
                       setCalendarMonth({ year: newYear, month: newMonth });
                       setSelectedDate(null);
                     }}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                    className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-all"
                   >
-                    <ChevronRight className="w-6 h-6 text-gray-500" />
+                    <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" />
                   </button>
                   <button
                     onClick={() => {
@@ -5484,7 +5486,7 @@ const StudyTrackerApp = ({ session }) => {
                       setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
                       setSelectedDate(getTodayDateIST());
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all font-semibold"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all font-semibold text-sm sm:text-base"
                   >
                     Today
                   </button>
@@ -5492,10 +5494,10 @@ const StudyTrackerApp = ({ session }) => {
               </div>
 
               {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {/* Day Headers */}
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="text-center font-semibold text-gray-600 py-2 bg-gray-50 rounded-lg">
+                  <div key={day} className="text-center font-semibold text-gray-600 py-1 sm:py-2 bg-gray-50 rounded-lg text-xs sm:text-base">
                     {day}
                   </div>
                 ))}
@@ -5512,7 +5514,7 @@ const StudyTrackerApp = ({ session }) => {
                   
                   // Add empty cells for days before month starts
                   for (let i = 0; i < startingDayOfWeek; i++) {
-                    days.push(<div key={`empty-${i}`} className="min-h-[120px] bg-gray-50 rounded-lg"></div>);
+                    days.push(<div key={`empty-${i}`} className="min-h-[60px] sm:min-h-[120px] bg-gray-50 rounded-lg"></div>);
                   }
                   
                   // Add cells for each day of the month
@@ -5541,7 +5543,7 @@ const StudyTrackerApp = ({ session }) => {
                       <div 
                         key={day} 
                         onClick={() => setSelectedDate(dateStr)}
-                        className={`min-h-[120px] p-2 rounded-lg border-2 transition-all cursor-pointer ${
+                        className={`min-h-[60px] sm:min-h-[120px] p-1 sm:p-2 rounded-lg border-2 transition-all cursor-pointer ${
                           selectedDate === dateStr
                             ? 'bg-gradient-to-br from-purple-100 to-pink-100 border-purple-500 shadow-lg ring-2 ring-purple-300'
                             : isToday 
@@ -5549,11 +5551,11 @@ const StudyTrackerApp = ({ session }) => {
                             : 'bg-white border-gray-200 hover:border-indigo-300 hover:shadow-md'
                         }`}
                       >
-                        <div className={`text-sm font-semibold mb-1 ${
+                        <div className={`text-xs sm:text-sm font-semibold mb-1 ${
                           isToday ? 'text-indigo-600' : 'text-gray-500'
                         }`}>
                           {day}
-                          {isToday && <span className="ml-1 text-xs bg-indigo-600 text-white px-2 py-0.5 rounded-full">Today</span>}
+                          {isToday && <span className="ml-1 text-[10px] sm:text-xs bg-indigo-600 text-white px-1 sm:px-2 py-0.5 rounded-full hidden sm:inline">Today</span>}
                         </div>
                         
                         <div className="space-y-1 overflow-y-auto max-h-[90px]">

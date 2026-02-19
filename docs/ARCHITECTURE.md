@@ -11,7 +11,7 @@ Kannama Study Tracker is a family-focused study management application that help
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | Frontend | React 18.2 | UI Components |
-| Styling | Tailwind CSS | Responsive design |
+| Styling | Tailwind CSS | Mobile-first responsive design |
 | Icons | Lucide React | UI icons |
 | Database | Supabase (PostgreSQL) | Data persistence |
 | Authentication | Supabase Auth | User management |
@@ -43,6 +43,7 @@ Kannama Study Tracker is a family-focused study management application that help
 | Document | Description |
 |----------|-------------|
 | [docs/technical/DATABASE_SCHEMA.md](technical/DATABASE_SCHEMA.md) | Database tables, relationships, RLS policies |
+| [docs/technical/UI_RESPONSIVENESS.md](technical/UI_RESPONSIVENESS.md) | Mobile-first design, breakpoints, responsive patterns |
 
 ---
 
@@ -128,19 +129,22 @@ StudyTrackerApp/
 
 ## Key Design Decisions
 
-### 1. Profile-Based Data Isolation
+### 1. Mobile-First Responsive Design
+All UI components are designed mobile-first with Tailwind CSS breakpoints. Navigation uses horizontal scrolling on mobile, views stack vertically, and touch targets meet accessibility standards. See [UI_RESPONSIVENESS.md](technical/UI_RESPONSIVENESS.md).
+
+### 2. Profile-Based Data Isolation
 Each child has their own profile, and all data (tasks, subjects, exams) is scoped to that profile.
 
-### 2. Two-Mode Chapter Tracking
+### 3. Two-Mode Chapter Tracking
 Users can choose between "Smart" (automatic) and "Comprehensive" (manual) tracking modes per profile.
 
-### 3. Gamification
+### 4. Gamification
 Points and badges encourage study habits without being punitive.
 
-### 4. Task Rollover
+### 5. Task Rollover
 Incomplete tasks automatically move to the current day, ensuring nothing is forgotten.
 
-### 5. Custom Hooks
+### 6. Custom Hooks
 Business logic is extracted into reusable hooks (`useProfiles`, `useReminders`, `useDataLoader`).
 
 ---

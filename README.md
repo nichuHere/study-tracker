@@ -79,6 +79,7 @@ This guide contains everything you need:
 
 ### Technical Specs
 - [docs/technical/DATABASE_SCHEMA.md](docs/technical/DATABASE_SCHEMA.md) - Database tables & RLS
+- [docs/technical/UI_RESPONSIVENESS.md](docs/technical/UI_RESPONSIVENESS.md) - Mobile-first design & breakpoints
 
 ### Database Migrations
 - `supabase-schema.sql` - Main database schema

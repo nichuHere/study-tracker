@@ -675,6 +675,18 @@ const StudyTrackerApp = ({ session }) => {
     : [];
 
   // Filter tasks for active profile only
+  // DEBUG: Log types to identify filtering issue
+  if (activeProfile && tasks.length > 0) {
+    console.log('🔍 Profile filtering debug:', {
+      activeProfileId: activeProfile.id,
+      activeProfileIdType: typeof activeProfile.id,
+      sampleTaskProfileId: tasks[0]?.profile_id,
+      sampleTaskProfileIdType: typeof tasks[0]?.profile_id,
+      totalTasks: tasks.length,
+      matchingTasks: tasks.filter(t => t.profile_id === activeProfile.id).length,
+      looseMatchingTasks: tasks.filter(t => t.profile_id == activeProfile.id).length
+    });
+  }
   const profileTasks = activeProfile
     ? tasks.filter(t => t.profile_id === activeProfile.id)
     : [];

@@ -49,15 +49,44 @@ https://your-custom-domain.com/**
 - Ensure REACT_APP_ prefix is used (required for Create React App)
 - Trigger a new deployment after changing env vars
 
-### 4. Deployment Checklist
+### 4. Pre-Deployment Code Quality Checks
 
+**CRITICAL: Run these checks before every deployment to avoid build failures on Vercel.**
+
+```bash
+# 1. Run ESLint to catch errors (Vercel treats warnings as errors in production)
+npm run build
+
+# 2. Check for any warnings in the output
+# If you see ESLint warnings, fix them before deploying
+```
+
+#### Common ESLint Issues That Block Deployment:
+
+| Issue | Solution |
+|-------|----------|
+| `'xxx' is defined but never used` | Remove unused imports/variables or prefix with `_` |
+| `Expected '===' and instead saw '=='` | Use strict equality `===` instead of `==` |
+| `React Hook useEffect has missing dependencies` | Add dependencies or use `// eslint-disable-next-line` |
+| `Variable shadowing` | Rename variables to avoid conflicts |
+
+#### Best Practices:
+1. **Before committing**: Run `npm run build` locally
+2. **Check for warnings**: Any ESLint warning will fail the Vercel build
+3. **Fix imports**: Remove unused imports immediately
+4. **Use strict equality**: Always use `===` and `!==`
+5. **Prefix unused vars with `_`**: e.g., `_unusedVar` if intentionally unused
+
+### 5. Deployment Checklist
+
+- [ ] **Run `npm run build` locally - NO warnings**
 - [ ] Environment variables added in Vercel
 - [ ] Supabase Site URL set to production domain
 - [ ] Supabase Redirect URLs configured with production domain
 - [ ] Redeployed after env var changes
 - [ ] Tested authentication flow on production URL
 
-### 5. Vercel Deployment
+### 6. Vercel Deployment
 
 ```bash
 # Install Vercel CLI (if not already installed)

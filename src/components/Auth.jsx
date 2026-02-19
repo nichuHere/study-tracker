@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase, setRememberMe } from '../lib/supabase';
+import { supabase, setRememberMe as setRememberMePreference } from '../lib/supabase';
 import { Mail, Lock, User, AlertCircle, CheckCircle, Book, Target, TrendingUp } from 'lucide-react';
 import BoyLogo from '../image/Boy.png';
 
@@ -59,7 +59,7 @@ const Auth = () => {
       } else {
         // Log In
         // Set remember me preference BEFORE login so storage is configured correctly
-        setRememberMe(rememberMe);
+        setRememberMePreference(rememberMe);
         
         const { error } = await supabase.auth.signInWithPassword({
           email,

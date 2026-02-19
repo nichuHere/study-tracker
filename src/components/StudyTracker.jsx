@@ -684,6 +684,7 @@ const StudyTrackerApp = ({ session }) => {
       sampleTaskProfileIdType: typeof tasks[0]?.profile_id,
       totalTasks: tasks.length,
       matchingTasks: tasks.filter(t => t.profile_id === activeProfile.id).length,
+      // eslint-disable-next-line eqeqeq
       looseMatchingTasks: tasks.filter(t => t.profile_id == activeProfile.id).length
     });
   }

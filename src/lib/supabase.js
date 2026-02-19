@@ -13,4 +13,34 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env.local file.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Check if user previously chose "Remember Me"
+const getStorageType = () => {
+  // Check localStorage for the preference
+  const rememberMe = localStorage.getItem('rememberMe');
+  // Default to localStorage (remembered) if no preference set
+  return rememberMe === 'false' ? sessionStorage : localStorage;
+};
+
+// Create the default client with localStorage
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: getStorageType(),
+    autoRefreshToken: true,
+    persistSession: true,
+  }
+});
+
+// Function to update storage preference and reinitialize auth
+export const setRememberMe = (remember) => {
+  localStorage.setItem('rememberMe', remember.toString());
+  
+  if (!remember) {
+    // If not remembering, we need to move the session to sessionStorage
+    // This will be picked up on next page load
+    const sessionData = localStorage.getItem('sb-' + supabaseUrl.split('//')[1].split('.')[0] + '-auth-token');
+    if (sessionData) {
+      sessionStorage.setItem('sb-' + supabaseUrl.split('//')[1].split('.')[0] + '-auth-token', sessionData);
+      localStorage.removeItem('sb-' + supabaseUrl.split('//')[1].split('.')[0] + '-auth-token');
+    }
+  }
+};

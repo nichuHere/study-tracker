@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, setRememberMe } from '../lib/supabase';
 import { Mail, Lock, User, AlertCircle, CheckCircle, Book, Target, TrendingUp } from 'lucide-react';
 import BoyLogo from '../image/Boy.png';
 

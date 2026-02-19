@@ -6,7 +6,7 @@ A comprehensive family study tracking application with authentication, cloud sto
 
 **For complete setup and usage instructions, please refer to:**
 
-👉 **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** 👈
+👉 **[docs/COMPLETE_GUIDE.md](docs/COMPLETE_GUIDE.md)** 👈
 
 This guide contains everything you need:
 - ✅ Initial setup instructions
@@ -55,13 +55,35 @@ This guide contains everything you need:
 - Secure authentication
 - Beautiful, responsive UI
 
-## 📖 Important Files
+## 📖 Documentation
 
-- `COMPLETE_GUIDE.md` - **Read this first!** Complete setup & usage guide
+### Architecture & Setup
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System overview & project structure
+- [docs/COMPLETE_GUIDE.md](docs/COMPLETE_GUIDE.md) - Complete setup & usage guide
+- [docs/technical/DEPLOYMENT.md](docs/technical/DEPLOYMENT.md) - Deployment instructions
+
+### Feature Specs
+| Feature | Documentation |
+|---------|---------------|
+| Authentication | [docs/features/AUTHENTICATION.md](docs/features/AUTHENTICATION.md) |
+| Profiles | [docs/features/PROFILES.md](docs/features/PROFILES.md) |
+| Subjects & Chapters | [docs/features/SUBJECTS.md](docs/features/SUBJECTS.md) |
+| Tasks | [docs/features/TASKS.md](docs/features/TASKS.md) |
+| Task Rollover | [docs/features/TASK_ROLLOVER.md](docs/features/TASK_ROLLOVER.md) |
+| Exams | [docs/features/EXAMS.md](docs/features/EXAMS.md) |
+| Reminders | [docs/features/REMINDERS.md](docs/features/REMINDERS.md) |
+| Chapter Tracking | [docs/features/CHAPTER_TRACKING.md](docs/features/CHAPTER_TRACKING.md) |
+| Points System | [docs/features/POINTS_SYSTEM.md](docs/features/POINTS_SYSTEM.md) |
+| Badges | [docs/features/BADGES.md](docs/features/BADGES.md) |
+| School Documents | [docs/features/SCHOOL_DOCUMENTS.md](docs/features/SCHOOL_DOCUMENTS.md) |
+
+### Technical Specs
+- [docs/technical/DATABASE_SCHEMA.md](docs/technical/DATABASE_SCHEMA.md) - Database tables & RLS
+
+### Database Migrations
 - `supabase-schema.sql` - Main database schema
 - `supabase-auth-migration.sql` - Authentication setup
 - `supabase-school-docs-schema.sql` - School documents feature
-- `.env.local` - Your environment variables (create this)
 
 ## 💰 Cost
 

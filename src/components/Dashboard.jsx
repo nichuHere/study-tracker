@@ -334,15 +334,15 @@ const Dashboard = ({
   }, [profiles, tasks, subjects, exams, leaderboardType]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
+    <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto">
         
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-gray-900 mb-2">
+        <div className="glass-card rounded-2xl p-6 mb-8 shadow-glass">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
             Dashboard
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-700 font-medium">
             Welcome back, {activeProfile?.name || 'Student'}! 👋
           </p>
         </div>
@@ -356,52 +356,52 @@ const Dashboard = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
               {/* Completion Card */}
-              <div className="bg-pastel-blue-light rounded-2xl p-6 shadow-soft hover:shadow-card transition-shadow">
+              <div className="glass-card rounded-2xl p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-600">Completed</span>
-                  <CheckCircleIcon className="w-5 h-5 text-gray-500" />
+                  <span className="text-sm font-semibold text-indigo-600">Completed</span>
+                  <CheckCircleIcon className="w-5 h-5 text-indigo-500" />
                 </div>
-                <div className="text-4xl font-semibold text-gray-500">
+                <div className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   {stats.completionRate}%
                 </div>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-gray-600 mt-1 font-medium">
                   {stats.completedToday}/{stats.totalToday} tasks today
                 </p>
               </div>
 
               {/* Subjects Card */}
-              <div className="bg-pastel-purple-light rounded-2xl p-6 shadow-soft hover:shadow-card transition-shadow">
+              <div className="glass-card rounded-2xl p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-600">Today</span>
-                  <Clock className="w-5 h-5 text-gray-500" />
+                  <span className="text-sm font-semibold text-purple-600">Today</span>
+                  <Clock className="w-5 h-5 text-purple-500" />
                 </div>
-                <div className="text-4xl font-semibold text-gray-500">
+                <div className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                   {Math.floor(stats.studyMinutesToday / 60)}<span className="text-2xl">.{Math.floor((stats.studyMinutesToday % 60) / 6)}</span>
                 </div>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-gray-600 mt-1 font-medium">
                   hours studied today
                 </p>
               </div>
 
               {/* Study Hours Card */}
-              <div className="bg-pastel-pink-light rounded-2xl p-6 shadow-soft hover:shadow-card transition-shadow">
+              <div className="glass-card rounded-2xl p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-600">This Week</span>
-                  <TrendingUp className="w-5 h-5 text-gray-500" />
+                  <span className="text-sm font-semibold text-pink-600">This Week</span>
+                  <TrendingUp className="w-5 h-5 text-pink-500" />
                 </div>
-                <div className="text-4xl font-semibold text-gray-500">
+                <div className="text-4xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
                   {Math.floor(stats.studyMinutesWeek / 60)}<span className="text-2xl">h</span>
                 </div>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-gray-600 mt-1 font-medium">
                   {stats.studyMinutesWeek} mins total
                 </p>
               </div>
             </div>
 
             {/* Study Streak Section - Enhanced with Activity */}
-            <div className="bg-white rounded-2xl p-6 shadow-card">
+            <div className="glass-card rounded-2xl p-6 shadow-glass">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-gray-900">Study Streak</h2>
+                <h2 className="text-lg font-bold text-gray-800">Study Streak</h2>
                 <Flame className="w-5 h-5 text-orange-500" />
               </div>
               
@@ -529,15 +529,15 @@ const Dashboard = ({
             </div>
 
             {/* Subject Insights - Compact */}
-            <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+            <div className="glass-card rounded-2xl shadow-glass overflow-hidden">
               <div 
-                className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/20 transition-colors"
                 onClick={() => setShowSubjectInsights(!showSubjectInsights)}
               >
-                <h2 className="text-lg font-semibold text-gray-900">Subject Insights</h2>
+                <h2 className="text-lg font-bold text-gray-800">Subject Insights</h2>
                 {showSubjectInsights ? 
-                  <ChevronUp className="w-5 h-5 text-gray-400" /> : 
-                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                  <ChevronUp className="w-5 h-5 text-gray-600" /> : 
+                  <ChevronDown className="w-5 h-5 text-gray-600" />
                 }
               </div>
               
@@ -546,7 +546,7 @@ const Dashboard = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Most Active Subjects */}
                     <div>
-                      <h3 className="font-semibold text-gray-500 mb-3 flex items-center gap-2 text-sm">
+                      <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2 text-sm">
                         <Target className="w-4 h-4 text-green-600" />
                         Most Active (Last 7 Days)
                       </h3>
@@ -555,9 +555,9 @@ const Dashboard = ({
                       ) : (
                         <div className="space-y-2">
                           {mostActiveSubjects.map((subject, i) => (
-                            <div key={i} className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
-                              <span className="text-sm font-medium text-gray-500">{subject.name}</span>
-                              <span className="text-xs text-green-700 font-semibold">
+                            <div key={i} className="glass-white flex items-center justify-between p-3 rounded-xl shadow-soft">
+                              <span className="text-sm font-semibold text-gray-700">{subject.name}</span>
+                              <span className="text-xs text-green-700 font-bold">
                                 {subject.recentActivity} tasks
                               </span>
                             </div>
@@ -568,7 +568,7 @@ const Dashboard = ({
 
                     {/* Neglected Subjects */}
                     <div>
-                      <h3 className="font-semibold text-gray-500 mb-3 flex items-center gap-2 text-sm">
+                      <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2 text-sm">
                         <AlertCircle className="w-4 h-4 text-rose-400" />
                         Needs Attention
                       </h3>
@@ -577,9 +577,9 @@ const Dashboard = ({
                       ) : (
                         <div className="space-y-2">
                           {neglectedSubjects.map((subject, i) => (
-                            <div key={i} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
-                              <span className="text-sm font-medium text-gray-500">{subject.name}</span>
-                              <span className="text-xs text-rose-500 font-semibold">
+                            <div key={i} className="glass-white flex items-center justify-between p-3 rounded-xl shadow-soft border-l-4 border-rose-400">
+                              <span className="text-sm font-semibold text-gray-700">{subject.name}</span>
+                              <span className="text-xs text-rose-600 font-bold">
                                 {subject.totalTasks === 0 ? 'Never studied' : 'No activity (3+ days)'}
                               </span>
                             </div>
@@ -593,10 +593,10 @@ const Dashboard = ({
             </div>
 
             {/* Today's Progress */}
-            <div className="bg-white rounded-2xl p-6 shadow-card">
+            <div className="glass-card rounded-2xl p-6 shadow-glass">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Today's Progress</h2>
-                <button className="text-sm text-accent-blue hover:underline">
+                <h2 className="text-lg font-bold text-gray-800">Today's Progress</h2>
+                <button className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold hover:underline">
                   View all
                 </button>
               </div>
@@ -604,14 +604,14 @@ const Dashboard = ({
               {/* Simple bar chart */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="text-sm font-medium text-gray-600 w-24">Completed</div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                  <div className="text-sm font-semibold text-gray-700 w-24">Completed</div>
+                  <div className="flex-1 glass-white rounded-full h-3 overflow-hidden shadow-inner">
                     <div 
-                      className="bg-gradient-to-r from-green-400 to-green-500 h-full rounded-full transition-all"
+                      className="bg-gradient-to-r from-green-400 to-green-500 h-full rounded-full transition-all shadow-sm"
                       style={{ width: `${Math.min((stats.completedToday / Math.max(stats.totalToday, 1)) * 100, 100)}%` }}
                     />
                   </div>
-                  <span className="text-sm font-semibold text-gray-500 w-16 text-right">
+                  <span className="text-sm font-bold text-gray-700 w-16 text-right">
                     {stats.completedToday}/{stats.totalToday}
                   </span>
                 </div>
@@ -645,17 +645,17 @@ const Dashboard = ({
             </div>
 
             {/* Badges Section */}
-            <div className="bg-white rounded-2xl p-6 shadow-card">
+            <div className="glass-card rounded-2xl p-6 shadow-glass">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold text-gray-900">Badge Collection</h2>
-                  <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-semibold">
+                  <h2 className="text-lg font-bold text-gray-800">Badge Collection</h2>
+                  <span className="glass-white px-2 py-1 rounded-full text-xs font-bold text-indigo-700 shadow-sm">
                     {allBadgesWithStatus.filter(b => b.unlocked).length}/{allBadgesWithStatus.length}
                   </span>
                 </div>
                 <button
                   onClick={() => setShowBadgeInfo(!showBadgeInfo)}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-1 hover:bg-white/40 rounded-full transition-colors"
                   title="Learn about badges"
                 >
                   <Info className="w-5 h-5 text-gray-600" />
@@ -820,12 +820,12 @@ const Dashboard = ({
 
           {/* Sidebar - Leaderboard */}
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-card sticky top-6 z-10">
+            <div className="glass-card rounded-2xl p-6 shadow-glass sticky top-6 z-10">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Leaderboard</h2>
+                <h2 className="text-lg font-bold text-gray-800">Leaderboard</h2>
                 <button
                   onClick={() => setShowPointsInfo(!showPointsInfo)}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-1 hover:bg-white/40 rounded-full transition-colors"
                   title="How points are calculated"
                 >
                   <Info className="w-5 h-5 text-gray-600" />
@@ -833,12 +833,12 @@ const Dashboard = ({
               </div>
               
               {/* Toggle between All-Time and Daily */}
-              <div className="flex gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
+              <div className="flex gap-2 mb-4 p-1 glass-white rounded-xl shadow-inner">
                 <button
                   onClick={() => setLeaderboardType('all-time')}
-                  className={`flex-1 px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
                     leaderboardType === 'all-time'
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md'
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg transform scale-105'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
@@ -846,9 +846,9 @@ const Dashboard = ({
                 </button>
                 <button
                   onClick={() => setLeaderboardType('daily')}
-                  className={`flex-1 px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
                     leaderboardType === 'daily'
-                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-md'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg transform scale-105'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
@@ -858,21 +858,21 @@ const Dashboard = ({
               
               {/* Daily mode info */}
               {leaderboardType === 'daily' && (
-                <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                <div className="mb-3 px-3 py-2 glass-white border border-green-300 rounded-xl text-xs text-green-700 font-medium shadow-sm">
                   <strong>Today's Leaderboard:</strong> Only counts tasks completed & study time from today
                 </div>
               )}
               
               {/* Points Info Tooltip - Compact */}
               {showPointsInfo && (
-                <div className="mb-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-3 border-2 border-blue-200 relative max-h-96 overflow-y-auto">
+                <div className="mb-4 glass-card rounded-xl p-3 border-2 border-indigo-300 relative max-h-96 overflow-y-auto shadow-glass">
                   <button
                     onClick={() => setShowPointsInfo(false)}
-                    className="absolute top-2 right-2 p-1 hover:bg-white rounded-full transition-colors z-10"
+                    className="absolute top-2 right-2 p-1 hover:bg-white/40 rounded-full transition-colors z-10"
                   >
-                    <X className="w-3 h-3 text-gray-500" />
+                    <X className="w-3 h-3 text-gray-600" />
                   </button>
-                  <h3 className="font-semibold text-gray-500 mb-2 text-xs flex items-center gap-1.5">
+                  <h3 className="font-bold text-gray-700 mb-2 text-xs flex items-center gap-1.5">
                     <Zap className="w-3.5 h-3.5 text-yellow-500" />
                     How to Earn Points
                   </h3>

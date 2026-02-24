@@ -127,6 +127,9 @@ const StudyTrackerApp = ({ session }) => {
   const [examChapterInput, setExamChapterInput] = useState('');
   const [editingExam, setEditingExam] = useState(null);
   const [minimizedExams, setMinimizedExams] = useState({});
+  const [selectedExamId, setSelectedExamId] = useState(null);
+  const [selectedSubjectIndex, setSelectedSubjectIndex] = useState(null);
+  const [editingCustomStudyMode, setEditingCustomStudyMode] = useState(null);
   const [showPreviousExams, setShowPreviousExams] = useState(false);
   const [expandedReminders, setExpandedReminders] = useState({});
   const [viewingSubject, setViewingSubject] = useState(null);
@@ -195,6 +198,25 @@ const StudyTrackerApp = ({ session }) => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfile]);
+
+  // Auto-select first exam and subject when viewing exams
+  useEffect(() => {
+    if (activeView === 'exams' && !selectedExamId && !showAddExam) {
+      const upcomingExams = getUpcomingExams();
+      if (upcomingExams.length > 0) {
+        setSelectedExamId(upcomingExams[0].id);
+        setSelectedSubjectIndex(0);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, selectedExamId, showAddExam]);
+
+  // Auto-select first subject when exam changes
+  useEffect(() => {
+    if (selectedExamId && activeView === 'exams') {
+      setSelectedSubjectIndex(0);
+    }
+  }, [selectedExamId, activeView]);
 
   // Process task rollover - move incomplete tasks from previous days to today
   const processTaskRollover = async (tasks, _profileId) => {
@@ -934,7 +956,9 @@ const StudyTrackerApp = ({ session }) => {
           name: chapterName.trim(), 
           status: 'pending',
           revisionsNeeded: 0,
-          revisionsCompleted: 0
+          revisionsCompleted: 0,
+          studyMode: 'Full Portions',
+          customStudyMode: ''
         }]
       };
       
@@ -977,6 +1001,26 @@ const StudyTrackerApp = ({ session }) => {
       await updateExam(examId, { subjects: updatedSubjects });
     } catch (error) {
       console.error('Error updating chapter revisions:', error);
+    }
+  };
+
+  const updateChapterStudyMode = async (examId, subjectIndex, chapterIndex, studyMode, customStudyMode = '') => {
+    try {
+      const exam = exams.find(e => e.id === examId);
+      if (!exam) return;
+      
+      const updatedSubjects = [...exam.subjects];
+      const updatedChapters = [...updatedSubjects[subjectIndex].chapters];
+      updatedChapters[chapterIndex] = { 
+        ...updatedChapters[chapterIndex], 
+        studyMode,
+        customStudyMode 
+      };
+      updatedSubjects[subjectIndex] = { ...updatedSubjects[subjectIndex], chapters: updatedChapters };
+      
+      await updateExam(examId, { subjects: updatedSubjects });
+    } catch (error) {
+      console.error('Error updating chapter study mode:', error);
     }
   };
 
@@ -1043,11 +1087,12 @@ const StudyTrackerApp = ({ session }) => {
   };
 
   const getExamProgress = (exam) => {
-    if (!exam.subjects || exam.subjects.length === 0) return { pending: 0, started: 0, completed: 0, percentage: 0 };
+    if (!exam.subjects || exam.subjects.length === 0) return { pending: 0, started: 0, reviewed: 0, completed: 0, percentage: 0 };
     
     let totalChapters = 0;
     let pending = 0;
     let started = 0;
+    let reviewed = 0;
     let completed = 0;
     
     exam.subjects.forEach(subject => {
@@ -1055,13 +1100,14 @@ const StudyTrackerApp = ({ session }) => {
         totalChapters += subject.chapters.length;
         pending += subject.chapters.filter(c => c.status === 'pending').length;
         started += subject.chapters.filter(c => c.status === 'started').length;
+        reviewed += subject.chapters.filter(c => c.status === 'reviewed').length;
         completed += subject.chapters.filter(c => c.status === 'completed').length;
       }
     });
     
     const percentage = totalChapters > 0 ? Math.round((completed / totalChapters) * 100) : 0;
     
-    return { pending, started, completed, percentage, totalChapters };
+    return { pending, started, reviewed, completed, percentage, totalChapters };
   };
 
   // Get current day of week in IST (0=Sun, 1=Mon, ..., 6=Sat)
@@ -1613,10 +1659,17 @@ const StudyTrackerApp = ({ session }) => {
     };
   };
 
+  // Compute selected exam data for split panel view
+  const selectedExamData = selectedExamId ? getUpcomingExams().find(e => e.id === selectedExamId) : null;
+  const selectedExamProgress = selectedExamData ? getExamProgress(selectedExamData) : null;
+  const selectedSubjectData = selectedExamData && selectedSubjectIndex !== null && selectedExamData.subjects?.[selectedSubjectIndex] 
+    ? selectedExamData.subjects[selectedSubjectIndex] 
+    : null;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
+    <div className="min-h-screen">
       {/* Top Navigation Bar - EduMaster style */}
-      <nav className="sticky top-0 z-40 bg-gradient-to-r from-amber-100/90 via-orange-100/90 to-rose-100/90 backdrop-blur-md border-b border-amber-200/50 shadow-sm">
+      <nav className="sticky top-0 z-40 glass-nav shadow-glass">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             {/* Logo & Profile Switcher */}
@@ -1632,7 +1685,7 @@ const StudyTrackerApp = ({ session }) => {
                 <div className="relative">
                   <button
                     onClick={() => setShowSidebar(!showSidebar)}
-                    className="flex items-center gap-1 sm:gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-md hover:shadow-lg transition-all hover:scale-105"
+                    className="flex items-center gap-1 sm:gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105"
                   >
                     <div className="w-5 h-5 sm:w-6 sm:h-6 bg-white/20 rounded-full flex items-center justify-center">
                       <User className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -1645,9 +1698,9 @@ const StudyTrackerApp = ({ session }) => {
                   {showSidebar && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setShowSidebar(false)} />
-                      <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-amber-200 z-50 overflow-hidden">
-                        <div className="p-3 bg-gradient-to-r from-amber-50 to-rose-50 border-b border-amber-100">
-                          <h3 className="font-semibold text-gray-800 text-sm">Switch Child</h3>
+                      <div className="absolute left-0 mt-2 w-72 glass-strong rounded-2xl shadow-glass-xl border border-white/40 z-50 overflow-hidden">
+                        <div className="p-3 glass-white border-b border-white/30">
+                          <h3 className="font-bold text-gray-800 text-sm">Switch Child</h3>
                         </div>
                         <div className="p-2 max-h-80 overflow-y-auto">
                           {profiles.map(profile => (
@@ -1659,8 +1712,8 @@ const StudyTrackerApp = ({ session }) => {
                               }}
                               className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all mb-1 ${
                                 activeProfile?.id === profile.id
-                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-md'
-                                  : 'hover:bg-amber-50'
+                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
+                                  : 'hover:bg-white/40'
                               }`}
                             >
                               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
@@ -1683,13 +1736,13 @@ const StudyTrackerApp = ({ session }) => {
                         
                         {/* Add Child Button */}
                         {profiles.length < 5 && (
-                          <div className="p-2 border-t border-amber-100">
+                          <div className="p-2 border-t border-white/30">
                             <button
                               onClick={() => {
                                 setShowSidebar(false);
                                 setShowAddProfile(true);
                               }}
-                              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-amber-300 text-gray-500 hover:border-teal-400 hover:text-teal-600 transition-all"
+                              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-teal-300 text-gray-600 hover:border-teal-500 hover:text-teal-700 hover:bg-white/40 transition-all font-medium"
                             >
                               <div className="w-10 h-10 rounded-full border-2 border-dashed border-current flex items-center justify-center">
                                 <Plus className="w-5 h-5" />
@@ -1707,7 +1760,7 @@ const StudyTrackerApp = ({ session }) => {
 
             {/* Navigation Tabs - Scrollable on mobile */}
             <div className="flex-1 overflow-x-auto scrollbar-hide mx-2 md:mx-4">
-              <div className="flex items-center gap-1 bg-white/60 rounded-full px-2 py-1.5 shadow-inner w-max min-w-full md:w-auto md:min-w-0 md:justify-center">
+              <div className="flex items-center gap-1 glass-white rounded-full px-2 py-1.5 shadow-glass w-max min-w-full md:w-auto md:min-w-0 md:justify-center">
                 {[
                   { key: 'dashboard', label: 'Home', icon: Home },
                   { key: 'daily', label: 'Tasks', icon: CheckCircle },
@@ -1720,10 +1773,10 @@ const StudyTrackerApp = ({ session }) => {
                   <button
                     key={key}
                     onClick={() => setActiveView(key)}
-                    className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                    className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 ${
                       activeView === key
-                        ? 'bg-gradient-to-r from-rose-500 to-purple-500 text-white shadow-md'
-                        : 'text-gray-600 hover:bg-white hover:text-rose-600'
+                        ? 'bg-gradient-to-r from-rose-500 to-purple-500 text-white shadow-lg transform scale-105'
+                        : 'text-gray-600 hover:bg-white/60 hover:text-rose-600'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -1739,7 +1792,7 @@ const StudyTrackerApp = ({ session }) => {
               <div className="relative">
                 <button 
                   onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
-                  className="relative p-1.5 sm:p-2 bg-white/70 rounded-full hover:bg-white transition-colors shadow-sm"
+                  className="relative p-1.5 sm:p-2 glass-white rounded-full hover:bg-white/80 transition-all shadow-sm hover:shadow-lg"
                 >
                   <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
                   {(getDailySuggestions().filter((s, i) => !isNotificationDismissed(i, 'suggestion')).length + 
@@ -1757,17 +1810,17 @@ const StudyTrackerApp = ({ session }) => {
                 {showNotificationsDropdown && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowNotificationsDropdown(false)} />
-                    <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 max-h-[70vh] overflow-hidden">
-                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-gray-100">
+                    <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-96 glass-strong rounded-xl shadow-glass-xl border border-white/40 z-50 max-h-[70vh] overflow-hidden">
+                      <div className="flex items-center justify-between p-4 glass-white border-b border-white/30">
                         <div className="flex items-center gap-2">
                           <Bell className="w-5 h-5 text-orange-600" />
-                          <h3 className="font-semibold text-gray-900">Notifications</h3>
+                          <h3 className="font-bold text-gray-800">Notifications</h3>
                         </div>
                         <button
                           onClick={() => setShowNotificationsDropdown(false)}
-                          className="p-1 hover:bg-white rounded-full transition-colors"
+                          className="p-1 hover:bg-white/40 rounded-full transition-colors"
                         >
-                          <X className="w-4 h-4 text-gray-500" />
+                          <X className="w-4 h-4 text-gray-600" />
                         </button>
                       </div>
                       
@@ -1776,12 +1829,12 @@ const StudyTrackerApp = ({ session }) => {
                         {getTodaysReminders()
                           .filter(reminder => !isNotificationDismissed(reminder.id, 'reminder'))
                           .map((reminder) => (
-                          <div key={reminder.id} className="flex items-start gap-2 p-3 bg-amber-50 border-l-3 border-amber-400 rounded-lg group">
+                          <div key={reminder.id} className="flex items-start gap-2 p-3 glass-white border-l-4 border-amber-400 rounded-xl group shadow-sm">
                             <Clock className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 bg-amber-200 text-amber-700 text-[10px] font-semibold rounded uppercase">Reminder</span>
-                                <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
+                                <span className="px-1.5 py-0.5 bg-amber-200 text-amber-700 text-[10px] font-bold rounded uppercase">Reminder</span>
+                                <span className="font-semibold text-sm text-gray-900 truncate">{reminder.title}</span>
                               </div>
                               {reminder.description && (
                                 <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{reminder.description}</p>
@@ -1800,11 +1853,11 @@ const StudyTrackerApp = ({ session }) => {
                         {getTodaysRecurringReminders()
                           .filter(reminder => !isNotificationDismissed(reminder.id, 'recurring'))
                           .map((reminder) => (
-                          <div key={reminder.id} className="flex items-start gap-2 p-3 bg-purple-50 border-l-3 border-purple-400 rounded-lg group">
+                          <div key={reminder.id} className="flex items-start gap-2 p-3 glass-white border-l-4 border-purple-400 rounded-xl group shadow-sm">
                             <Repeat className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm text-gray-900 truncate">{reminder.title}</span>
+                                <span className="font-semibold text-sm text-gray-900 truncate">{reminder.title}</span>
                                 <span className="text-xs text-gray-500">• {reminder.time}</span>
                               </div>
                               {reminder.description && (
@@ -1873,12 +1926,12 @@ const StudyTrackerApp = ({ session }) => {
               {/* Profile Dropdown */}
               <button
                 onClick={() => setShowProfileModal(true)}
-                className="flex items-center gap-1 sm:gap-2 bg-white/70 rounded-full pl-1 pr-1.5 sm:pr-3 py-1 hover:bg-white transition-colors shadow-sm"
+                className="flex items-center gap-1 sm:gap-2 glass-white rounded-full pl-1 pr-1.5 sm:pr-3 py-1 hover:bg-white/80 transition-all shadow-sm hover:shadow-lg"
               >
-                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-rose-400 to-purple-500 rounded-full flex items-center justify-center">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-rose-400 to-purple-500 rounded-full flex items-center justify-center shadow-md">
                   <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
                 </div>
-                <span className="text-sm font-medium text-gray-700 hidden sm:block">
+                <span className="text-sm font-semibold text-gray-700 hidden sm:block">
                   {accountName || session?.user?.email?.split('@')[0] || 'Account'}
                 </span>
               </button>
@@ -1903,12 +1956,12 @@ const StudyTrackerApp = ({ session }) => {
         <div className={`max-w-6xl mx-auto${_loading ? ' opacity-30 pointer-events-none select-none' : ''}`}>
         {/* Profile Selector */}
         {!_loading && profiles.length === 0 ? (
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-8 mb-4 text-center border border-amber-200">
-            <div className="w-16 h-16 bg-gradient-to-br from-rose-400 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <div className="glass-card rounded-2xl shadow-glass-xl p-8 mb-4 text-center border border-white/40">
+            <div className="w-16 h-16 bg-gradient-to-br from-rose-400 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Welcome to Kannama Study Tracker!</h2>
-            <p className="text-gray-600 mb-6">Create a profile for your first child to get started</p>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent mb-4">Welcome to Kannama Study Tracker!</h2>
+            <p className="text-gray-600 mb-6 font-medium">Create a profile for your first child to get started</p>
             
             <div className="max-w-md mx-auto space-y-3">
               <input
@@ -1916,18 +1969,18 @@ const StudyTrackerApp = ({ session }) => {
                 placeholder="Child's name"
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
-                className="w-full p-3 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none bg-white/70"
+                className="w-full p-3 glass-white border-2 border-white/40 rounded-xl focus:border-rose-400 focus:outline-none shadow-sm"
               />
               <input
                 type="text"
                 placeholder="Class/Grade (e.g., Grade 5)"
                 value={newProfileClass}
                 onChange={(e) => setNewProfileClass(e.target.value)}
-                className="w-full p-3 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none bg-white/70"
+                className="w-full p-3 glass-white border-2 border-white/40 rounded-xl focus:border-rose-400 focus:outline-none shadow-sm"
               />
               <button
                 onClick={addProfile}
-                className="w-full bg-gradient-to-r from-rose-500 to-purple-500 text-white py-3 rounded-xl hover:from-rose-600 hover:to-purple-600 font-medium shadow-lg"
+                className="w-full bg-gradient-to-r from-rose-500 to-purple-500 text-white py-3 rounded-xl hover:from-rose-600 hover:to-purple-600 font-bold shadow-glass-lg hover:shadow-glass-xl transition-all transform hover:scale-105"
               >
                 Create Profile
               </button>
@@ -1938,32 +1991,32 @@ const StudyTrackerApp = ({ session }) => {
             {/* Profile Switch Indicator */}
             {profileSwitched && (
               <div className="fixed top-20 right-6 z-50 animate-bounce">
-                <div className="bg-gradient-to-r from-green-400 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 border-2 border-white">
-                  <div className="bg-white/30 p-2 rounded-lg animate-pulse">
+                <div className="glass-card border border-white/40 px-6 py-4 rounded-xl shadow-glass-xl flex items-center gap-3">
+                  <div className="bg-gradient-to-br from-green-400 to-emerald-500 p-2 rounded-lg animate-pulse shadow-lg">
                     <User className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <div className="text-sm font-medium opacity-90">Switched to</div>
-                    <div className="text-lg font-semibold">{switchedProfileName}</div>
+                    <div className="text-sm font-medium text-gray-600">Switched to</div>
+                    <div className="text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">{switchedProfileName}</div>
                   </div>
-                  <CheckCircle className="w-6 h-6 text-white" />
+                  <CheckCircle className="w-6 h-6 text-green-600" />
                 </div>
               </div>
             )}
 
             {/* Chapter Tracking Mode Selection Notification */}
             {showTrackingModeNotification && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="glass-strong rounded-xl shadow-glass-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/40">
                   {/* Header */}
-                  <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-6 rounded-t-xl">
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-6 rounded-t-xl shadow-lg">
                     <div className="flex items-center gap-3">
-                      <div className="bg-white/20 p-3 rounded-lg">
+                      <div className="bg-white/20 p-3 rounded-lg backdrop-blur-sm">
                         <BookOpen className="w-6 h-6" />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-semibold">Choose Chapter Tracking Mode</h2>
-                        <p className="text-sm text-white/80 mt-1">Select how you want to track chapter progress for {pendingTrackingModeProfile?.name}</p>
+                        <h2 className="text-2xl font-bold">Choose Chapter Tracking Mode</h2>
+                        <p className="text-sm text-white/90 mt-1">Select how you want to track chapter progress for {pendingTrackingModeProfile?.name}</p>
                       </div>
                     </div>
                   </div>
@@ -2110,7 +2163,7 @@ const StudyTrackerApp = ({ session }) => {
             )}
 
             {/* Stats Header */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 mb-4 border border-amber-200">
+            <div className="glass-card rounded-2xl shadow-glass p-6 mb-4 border border-white/40">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 {/* Left side - Title and date */}
                 <div className="flex flex-col">
@@ -2118,19 +2171,19 @@ const StudyTrackerApp = ({ session }) => {
                     {activeProfile?.name}'s Study Tracker
                   </h1>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 rounded-full">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 glass-white rounded-full shadow-sm">
                       <Calendar className="w-4 h-4 text-amber-600" />
-                      <span className="text-sm font-medium text-amber-700">
+                      <span className="text-sm font-semibold text-amber-700">
                         {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 rounded-full">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 glass-white rounded-full shadow-sm">
                       <Clock className="w-4 h-4 text-rose-500" />
-                      <span className="text-sm font-medium text-rose-700">{getTodayStudyTime()}m studied</span>
+                      <span className="text-sm font-semibold text-rose-700">{getTodayStudyTime()}m studied</span>
                     </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-100 rounded-full">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 glass-white rounded-full shadow-sm">
                       <Zap className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium text-green-700">Active</span>
+                      <span className="text-sm font-semibold text-green-700">Active</span>
                     </div>
                   </div>
                 </div>
@@ -3967,7 +4020,7 @@ const StudyTrackerApp = ({ session }) => {
           </div>
         )}
 
-        {/* Exams View - Redesigned */}
+        {/* Exams View - Split Panel Layout */}
         {activeView === 'exams' && (
           <div className="space-y-6">
             {/* Header with Add Exam Button */}
@@ -4120,20 +4173,224 @@ const StudyTrackerApp = ({ session }) => {
               </div>
             )}
 
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Upcoming Exams</h2>
-                <button
-                  onClick={() => setShowAddExam(true)}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Exam
-                </button>
-              </div>
+            {/* Split Panel Layout for Exams */}
+            <div className="space-y-4">
+              {/* Exam Selector Bar */}
+              {!showAddExam && selectedExamData && (
+                <div className="glass-card rounded-lg shadow-lg p-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3 flex-1 min-w-[300px]">
+                      <Book className="w-5 h-5 text-indigo-600" />
+                      {editingExam === selectedExamData.id ? (
+                        <div className="flex-1 flex items-center gap-3 flex-wrap">
+                          <input
+                            type="text"
+                            value={selectedExamData.name}
+                            onChange={(e) => {
+                              const updatedExams = exams.map(ex => 
+                                ex.id === selectedExamData.id ? { ...ex, name: e.target.value } : ex
+                              );
+                              setExams(updatedExams);
+                            }}
+                            onBlur={() => updateExam(selectedExamData.id, { name: selectedExamData.name })}
+                            className="flex-1 min-w-[200px] px-3 py-2 text-base font-semibold border-2 border-indigo-400 rounded-lg bg-white focus:ring-2 focus:ring-indigo-300"
+                            placeholder="Exam name"
+                          />
+                          <input
+                            type="date"
+                            value={selectedExamData.date}
+                            onChange={(e) => {
+                              const updatedExams = exams.map(ex => 
+                                ex.id === selectedExamData.id ? { ...ex, date: e.target.value } : ex
+                              );
+                              setExams(updatedExams);
+                            }}
+                            onBlur={() => updateExam(selectedExamData.id, { date: selectedExamData.date })}
+                            className="px-3 py-2 border-2 border-indigo-400 rounded-lg bg-white"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <select
+                            value={selectedExamId || ''}
+                            onChange={(e) => setSelectedExamId(e.target.value)}
+                            className="flex-1 max-w-md px-3 py-2 text-base font-semibold border-2 border-gray-200 rounded-lg bg-white hover:border-indigo-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+                          >
+                            {getUpcomingExams().map(exam => (
+                              <option key={exam.id} value={exam.id}>{exam.name}</option>
+                            ))}
+                          </select>
+                          <div className="text-sm text-gray-600 font-medium">
+                            {formatDateWithDay(selectedExamData.date)}
+                          </div>
+                        </>
+                      )}
+                      <div className="hidden sm:flex items-center gap-2 text-sm text-gray-600">
+                        <span className="font-medium">{selectedExamData.subjects?.length || 0} subjects</span>
+                        <span>•</span>
+                        <span className={`font-semibold ${selectedExamProgress.percentage >= 75 ? 'text-green-600' : selectedExamProgress.percentage >= 50 ? 'text-yellow-600' : 'text-gray-500'}`}>
+                          {selectedExamProgress.percentage}% complete
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {editingExam === selectedExamData.id ? (
+                        <button
+                          onClick={() => setEditingExam(null)}
+                          className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-all text-sm font-medium flex items-center gap-2"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span className="hidden sm:inline">Done</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setEditingExam(selectedExamData.id)}
+                          className="bg-amber-500 text-white px-3 py-2 rounded-lg hover:bg-amber-600 transition-all text-sm font-medium flex items-center gap-2"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Edit Exam</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setShowAddExam(true)}
+                        className="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 transition-all text-sm font-medium flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="hidden sm:inline">New Exam</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              {showAddExam && (
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {/* Left Panel - Subject List */}
+                <div className="lg:col-span-1 space-y-3">
+                  <div className="glass-card rounded-lg shadow-lg p-4 sticky top-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-base font-semibold text-gray-900">Subjects</h2>
+                      <div className="flex items-center gap-2">
+                        {!showAddExam && selectedExamData && (
+                          <button
+                            onClick={() => {
+                              setEditingExam(selectedExamData.id);
+                              setSelectedSubjectIndex(null);
+                            }}
+                            className="bg-indigo-600 text-white px-2 py-1 rounded text-xs hover:bg-indigo-700 transition-all flex items-center gap-1"
+                            title="Add new subject to this exam"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Add
+                          </button>
+                        )}
+                        {!showAddExam && selectedExamData && editingExam === selectedExamData.id && (
+                          <button
+                            onClick={() => setEditingExam(null)}
+                            className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-all"
+                          >
+                            Done
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {!showAddExam && selectedExamData ? (
+                      selectedExamData.subjects && selectedExamData.subjects.length > 0 ? (
+                        <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                          {selectedExamData.subjects.map((subject, subjectIdx) => {
+                            const daysLeft = getDaysUntil(subject.date);
+                            const subjectProgress = {
+                              completed: subject.chapters?.filter(c => c.status === 'completed').length || 0,
+                              reviewed: subject.chapters?.filter(c => c.status === 'reviewed').length || 0,
+                              started: subject.chapters?.filter(c => c.status === 'started').length || 0,
+                              pending: subject.chapters?.filter(c => c.status === 'pending').length || 0,
+                              total: subject.chapters?.length || 0
+                            };
+                            subjectProgress.percentage = subjectProgress.total > 0 
+                              ? Math.round((subjectProgress.completed / subjectProgress.total) * 100) 
+                              : 0;
+                            const isSelected = selectedSubjectIndex === subjectIdx;
+                            
+                            return (
+                              <button
+                                key={subjectIdx}
+                                onClick={() => setSelectedSubjectIndex(subjectIdx)}
+                                className={`w-full text-left p-3 rounded-lg transition-all cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-indigo-100 border-2 border-indigo-500 shadow-md' 
+                                    : 'bg-white border border-gray-200 hover:bg-gray-50 hover:border-indigo-300'
+                                }`}
+                              >
+                                <div className="font-semibold text-sm text-gray-900 mb-1">
+                                  {subject.subject}
+                                </div>
+                                <div className="flex items-center justify-between text-xs mb-2">
+                                  <span className={`font-medium ${daysLeft <= 3 ? 'text-rose-600' : daysLeft <= 7 ? 'text-orange-600' : 'text-indigo-600'}`}>
+                                    {daysLeft} {daysLeft === 1 ? 'day' : 'days'}
+                                  </span>
+                                  <span className="text-gray-600">
+                                    {formatDateWithDay(subject.date).split(',')[0]}
+                                  </span>
+                                </div>
+                                {subjectProgress.total > 0 && (
+                                  <>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                                      <div
+                                        className={`h-1.5 rounded-full transition-all ${
+                                          subjectProgress.percentage >= 75 ? 'bg-green-500' : subjectProgress.percentage >= 50 ? 'bg-yellow-500' : 'bg-gray-400'
+                                        }`}
+                                        style={{ width: `${subjectProgress.percentage}%` }}
+                                      />
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs text-gray-600">
+                                      <span>{subjectProgress.completed}/{subjectProgress.total} chapters</span>
+                                      <span className="font-semibold">{subjectProgress.percentage}%</span>
+                                    </div>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-30 text-gray-400" />
+                          <p className="text-gray-500 text-sm mb-3">No subjects yet</p>
+                          {editingExam === selectedExamData.id && (
+                            <p className="text-xs text-gray-400">Use the form on the right to add subjects</p>
+                          )}
+                        </div>
+                      )
+                    ) : showAddExam ? (
+                      <div className="text-center py-8 text-gray-500 text-sm">
+                        <Plus className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                        <p>Create an exam first</p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Calendar className="w-10 h-10 mx-auto mb-2 opacity-30 text-gray-400" />
+                        <p className="text-gray-500 text-sm">No exams yet</p>
+                        <button
+                          onClick={() => setShowAddExam(true)}
+                          className="mt-3 text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                        >
+                          + Create your first exam
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Panel - Subject Details */}
+                <div className="lg:col-span-3">
+                {/* Add Exam Modal (shown in right panel when active) */}
+                {showAddExam && (
+                  <div className="glass-card rounded-lg shadow-lg p-6 mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <Plus className="w-5 h-5 text-indigo-600" />
+                      Create New Exam
+                    </h3>
+                    <div className="space-y-3">
                   <input
                     type="text"
                     placeholder="Exam Name (e.g., First Mid-term Exams)"
@@ -4181,7 +4438,7 @@ const StudyTrackerApp = ({ session }) => {
                                 if (e.target.value) {
                                   setNewExamSubject({
                                     ...newExamSubject,
-                                    chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
+                                    chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
                                   });
                                   e.target.value = '';
                                 }
@@ -4207,7 +4464,7 @@ const StudyTrackerApp = ({ session }) => {
                               if (e.key === 'Enter' && examChapterInput.trim()) {
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
                                 });
                                 setExamChapterInput('');
                               }
@@ -4219,7 +4476,7 @@ const StudyTrackerApp = ({ session }) => {
                               if (examChapterInput.trim()) {
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
                                 });
                                 setExamChapterInput('');
                               }
@@ -4307,7 +4564,7 @@ const StudyTrackerApp = ({ session }) => {
                       onClick={() => {
                         setShowAddExam(false);
                         setNewExam({ name: '', subjects: [] });
-                        setNewExamSubject({ subject: '', date: '', chapters: [], keyPoints: '' });
+                        setNewExamSubject({ subject: '', date: '', chapters: [], keyPoints: '', studyMode: 'Full Portion', customStudyMode: '' });
                         setExamChapterInput('');
                       }}
                       className="px-4 bg-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-300"
@@ -4315,525 +4572,350 @@ const StudyTrackerApp = ({ session }) => {
                       Cancel
                     </button>
                   </div>
-                </div>
-              )}
+                    </div>
+                  </div>
+                )}
 
-              {getUpcomingExams().length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No upcoming exams</p>
-              ) : (
-                <div className="space-y-4">
-                  {getUpcomingExams().map(exam => {
-                    const progress = getExamProgress(exam);
-                    
-                    return (
-                      <div key={exam.id} className="border-2 border-indigo-200 rounded-lg p-4 bg-indigo-50 cursor-pointer hover:bg-indigo-100 transition-colors" onClick={() => !editingExam && setMinimizedExams(prev => ({
-                        ...prev,
-                        [exam.id]: !prev[exam.id]
-                      }))}>
-                        {/* Exam Header */}
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            {editingExam === exam.id ? (
-                              <input
-                                type="text"
-                                value={exam.name}
-                                onChange={(e) => updateExam(exam.id, { name: e.target.value })}
-                                className="w-full p-2 border rounded-lg bg-white font-semibold text-lg"
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            ) : (
-                              <h3 className="text-xl font-semibold text-gray-600">{exam.name}</h3>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            {editingExam === exam.id ? (
-                              <button
-                                onClick={() => setEditingExam(null)}
-                                className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                              >
-                                Update Exam
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setEditingExam(exam.id);
-                                  // Auto-expand exam when editing
-                                  setMinimizedExams(prev => ({ ...prev, [exam.id]: false }));
-                                }}
-                                className="text-indigo-600 hover:text-indigo-700"
-                                title="Edit exam"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setMinimizedExams(prev => ({
-                                ...prev,
-                                [exam.id]: !prev[exam.id]
-                              }))}
-                              className="text-blue-600 hover:text-blue-700"
-                              title={minimizedExams[exam.id] ? 'Expand exam' : 'Minimize exam'}
-                            >
-                              {minimizedExams[exam.id] ? (
-                                <Plus className="w-4 h-4" style={{ transform: 'rotate(90deg)' }} />
-                              ) : (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                                </svg>
-                              )}
-                            </button>
-                            <button
-                              onClick={() => deleteExam(exam.id)}
-                              className="text-red-500 hover:text-red-700"
-                              title="Delete exam"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                {/* Selected Subject Display */}
+                {!showAddExam && selectedExamData && selectedSubjectData && (
+                    <div className="glass-card rounded-lg shadow-lg p-6">
+                     {(() => {
+                        const daysLeft = getDaysUntil(selectedSubjectData.date);
+                        const subjectProgress = {
+                          completed: selectedSubjectData.chapters?.filter(c => c.status === 'completed').length || 0,
+                          reviewed: selectedSubjectData.chapters?.filter(c => c.status === 'reviewed').length || 0,
+                          started: selectedSubjectData.chapters?.filter(c => c.status === 'started').length || 0,
+                          pending: selectedSubjectData.chapters?.filter(c => c.status === 'pending').length || 0,
+                          total: selectedSubjectData.chapters?.length || 0
+                        };
+                        subjectProgress.percentage = subjectProgress.total > 0 
+                          ? Math.round((subjectProgress.completed / subjectProgress.total) * 100) 
+                          : 0;
 
-                        {/* Overall Progress */}
-                        {!minimizedExams[exam.id] && progress.total > 0 && (
-                          <div className="mb-4 p-3 bg-white rounded-lg">
-                            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                              <span className="font-semibold">Overall Progress</span>
-                              <span className="font-semibold">{progress.percentage}%</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                              <div
-                                className="bg-green-500 h-2 rounded-full transition-all"
-                                style={{ width: `${progress.percentage}%` }}
-                              />
-                            </div>
-                            <div className="flex gap-3 text-xs">
-                              <span className="text-green-600 flex items-center gap-1"><Check className="w-3 h-3" /> {progress.completed} Done</span>
-                              <span className="text-yellow-600 flex items-center gap-1"><Zap className="w-3 h-3" /> {progress.started} Started</span>
-                              <span className="text-gray-600 flex items-center gap-1"><Circle className="w-3 h-3" /> {progress.pending} Pending</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Subjects List */}
-                        {!minimizedExams[exam.id] && (
-                        <div className="space-y-3">
-                          {exam.subjects && exam.subjects.map((subject, subjectIdx) => {
-                            const daysLeft = getDaysUntil(subject.date);
-                            const subjectProgress = {
-                              completed: subject.chapters?.filter(c => c.status === 'completed').length || 0,
-                              started: subject.chapters?.filter(c => c.status === 'started').length || 0,
-                              pending: subject.chapters?.filter(c => c.status === 'pending').length || 0,
-                              total: subject.chapters?.length || 0
-                            };
-                            subjectProgress.percentage = subjectProgress.total > 0 
-                              ? Math.round((subjectProgress.completed / subjectProgress.total) * 100) 
-                              : 0;
-
-                            return (
-                              <div key={subjectIdx} className="bg-white rounded-lg p-3 border border-gray-200">
-                                {/* Subject Header */}
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <h4 className="font-semibold text-gray-500">{subject.subject}</h4>
-                                      <div className={`text-sm font-semibold ${daysLeft <= 3 ? 'text-rose-500' : 'text-indigo-500'}`}>
-                                        {daysLeft} {daysLeft === 1 ? 'day' : 'days'}
-                                      </div>
-                                    </div>
-                                    {editingExam === exam.id ? (
-                                      <input
-                                        type="date"
-                                        value={subject.date}
-                                        onChange={(e) => {
-                                          const updatedSubjects = [...exam.subjects];
-                                          updatedSubjects[subjectIdx] = { ...subject, date: e.target.value };
-                                          updateExam(exam.id, { subjects: updatedSubjects });
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="text-sm p-1 border rounded mt-1"
-                                      />
-                                    ) : (
-                                      <p className="text-xs text-gray-600">{formatDateWithDay(subject.date)}</p>
-                                    )}
-                                  </div>
-                                  {editingExam === exam.id && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (window.confirm(`Delete ${subject.subject} from this exam?`)) {
-                                          deleteSubjectFromExam(exam.id, subjectIdx);
-                                        }
+                        return (
+                          <>
+                            {/* Subject Header */}
+                            <div className="flex items-start justify-between mb-6">
+                              <div className="flex-1">
+                                <h3 className="text-3xl font-bold text-gray-900 mb-2">{selectedSubjectData.subject}</h3>
+                                <div className="flex items-center gap-4">
+                                  {editingExam === selectedExamData.id ? (
+                                    <input
+                                      type="date"
+                                      value={selectedSubjectData.date}
+                                      onChange={(e) => {
+                                        const updatedSubjects = [...selectedExamData.subjects];
+                                        updatedSubjects[selectedSubjectIndex] = { ...selectedSubjectData, date: e.target.value };
+                                        updateExam(selectedExamData.id, { subjects: updatedSubjects });
                                       }}
-                                      className="text-red-500 hover:text-red-700 ml-2"
-                                      title="Delete subject"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
+                                      className="px-3 py-2 border-2 border-indigo-300 rounded-lg bg-white"
+                                    />
+                                  ) : (
+                                    <p className="text-gray-600">{formatDateWithDay(selectedSubjectData.date)}</p>
                                   )}
+                                  <div className={`text-lg font-bold px-3 py-1 rounded-full ${
+                                    daysLeft <= 3 ? 'bg-rose-100 text-rose-700' : 
+                                    daysLeft <= 7 ? 'bg-orange-100 text-orange-700' : 
+                                    'bg-indigo-100 text-indigo-700'
+                                  }`}>
+                                    {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left
+                                  </div>
                                 </div>
+                              </div>
+                              {editingExam === selectedExamData.id && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Delete ${selectedSubjectData.subject} from this exam?`)) {
+                                      deleteSubjectFromExam(selectedExamData.id, selectedSubjectIndex);
+                                      setSelectedSubjectIndex(Math.max(0, selectedSubjectIndex - 1));
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-all"
+                                  title="Delete subject"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              )}
+                            </div>
 
-                                {/* Exam Marks (visible after exam date has passed or in edit mode) */}
-                                {(daysLeft < 0 || editingExam === exam.id) && (
-                                  <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <label className="text-xs font-semibold text-gray-500">Marks:</label>
-                                      <input
-                                        type="text"
-                                        value={subject.marksInput ?? ''}
-                                        onChange={(e) => {
-                                          const input = e.target.value.trim();
-                                          let percentage = null;
-                                          
-                                          if (input) {
-                                            // Check if input is in x/y or x\y format
-                                            if (input.includes('/') || input.includes('\\')) {
-                                              // Replace backslash with forward slash for consistent parsing
-                                              const normalizedInput = input.replace(/\\/g, '/');
-                                              const parts = normalizedInput.split('/');
-                                              if (parts.length === 2) {
-                                                const numerator = parseFloat(parts[0]);
-                                                const denominator = parseFloat(parts[1]);
-                                                if (!isNaN(numerator) && !isNaN(denominator) && denominator > 0) {
-                                                  percentage = Math.round((numerator / denominator) * 100 * 10) / 10;
-                                                }
-                                              }
-                                            } else {
-                                              // Direct percentage input
-                                              const num = parseFloat(input);
-                                              if (!isNaN(num) && num >= 0 && num <= 100) {
-                                                percentage = num;
-                                              }
+                            {/* Exam Marks Section */}
+                            {(daysLeft < 0 || editingExam === selectedExamData.id) && (
+                              <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <label className="text-sm font-semibold text-gray-700">Exam Marks:</label>
+                                  <input
+                                    type="text"
+                                    value={selectedSubjectData.marksInput ?? ''}
+                                    onChange={(e) => {
+                                      const input = e.target.value.trim();
+                                      let percentage = null;
+                                      
+                                      if (input) {
+                                        if (input.includes('/') || input.includes('\\')) {
+                                          const normalizedInput = input.replace(/\\/g, '/');
+                                          const parts = normalizedInput.split('/');
+                                          if (parts.length === 2) {
+                                            const numerator = parseFloat(parts[0]);
+                                            const denominator = parseFloat(parts[1]);
+                                            if (!isNaN(numerator) && !isNaN(denominator) && denominator > 0) {
+                                              percentage = Math.round((numerator / denominator) * 100 * 10) / 10;
                                             }
                                           }
-                                          
-                                          const updatedSubjects = [...exam.subjects];
-                                          updatedSubjects[subjectIdx] = { 
-                                            ...subject, 
-                                            marksInput: input,
-                                            marks: percentage 
-                                          };
-                                          updateExam(exam.id, { subjects: updatedSubjects });
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        placeholder="e.g., 45/50, 45\\50 or 90"
-                                        className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                                      />
-                                      {subject.marks != null && subject.marks >= 0 && (
-                                        <>
-                                          <span className="text-xs font-semibold text-indigo-600">
-                                            = {subject.marks}%
-                                          </span>
-                                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                            subject.marks === 100 ? 'bg-green-100 text-green-700' :
-                                            subject.marks >= 95 ? 'bg-blue-100 text-blue-700' :
-                                            subject.marks >= 90 ? 'bg-purple-100 text-purple-700' :
-                                            'bg-gray-100 text-gray-600'
-                                          }`}>
-                                            {subject.marks === 100 ? (
-                                              <><Trophy className="w-3 h-3 inline" /> Perfect!</>
-                                            ) : subject.marks >= 95 ? (
-                                              <><Star className="w-3 h-3 inline" /> Excellence!</>
-                                            ) : subject.marks >= 90 ? (
-                                              <><Sparkles className="w-3 h-3 inline" /> Outstanding!</>
-                                            ) : subject.marks >= 75 ? (
-                                              <><ThumbsUp className="w-3 h-3 inline" /> Good</>
-                                            ) : subject.marks >= 60 ? (
-                                              <><Check className="w-3 h-3 inline" /> Pass</>
-                                            ) : (
-                                              <><BookOpen className="w-3 h-3 inline" /> Keep Learning</>
-                                            )}
-                                          </span>
-                                        </>
-                                      )}
-                                    </div>
-                                    {subject.marks != null && subject.marks >= 90 && (
-                                      <div className="text-xs text-green-600 mt-1 font-semibold flex items-center gap-1">
-                                        <Gift className="w-3 h-3" /> Bonus: +{subject.marks === 100 ? '300' : subject.marks >= 95 ? '200' : '100'} pts!
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Subject Progress */}
-                                {subjectProgress.total > 0 && (
-                                  <div className="mb-2">
-                                    <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                      <div
-                                        className="bg-green-500 h-1.5 rounded-full transition-all"
-                                        style={{ width: `${subjectProgress.percentage}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Chapters */}
-                                {subject.chapters && subject.chapters.length > 0 && (
-                                  <div className="mb-2">
-                                    <div className="text-xs font-semibold text-gray-600 mb-1">Chapters:</div>
-                                    <div className="space-y-1">
-                                      {subject.chapters.map((chapter, chapterIdx) => {
-                                        const revisionsNeeded = chapter.revisionsNeeded ?? 0;
-                                        const revisionsCompleted = chapter.revisionsCompleted ?? 0;
-                                        
-                                        return (
-                                          <div key={chapterIdx} className="flex items-center gap-2 p-1.5 bg-gray-50 rounded">
-                                            <div className="flex-1 text-sm">{chapter.name}</div>
-                                            
-                                            {/* Revision Counter - Always visible if revisions needed */}
-                                            {revisionsNeeded > 0 && (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  if (!editingExam) {
-                                                    if (e.shiftKey && revisionsCompleted > 0) {
-                                                      // Shift+Click to decrement
-                                                      decrementChapterRevision(exam.id, subjectIdx, chapterIdx);
-                                                    } else if (revisionsCompleted < revisionsNeeded) {
-                                                      // Regular click to increment
-                                                      incrementChapterRevision(exam.id, subjectIdx, chapterIdx);
-                                                    }
-                                                  }
-                                                }}
-                                                onContextMenu={(e) => {
-                                                  e.preventDefault();
-                                                  e.stopPropagation();
-                                                  if (!editingExam && revisionsCompleted > 0) {
-                                                    // Right-click to decrement
-                                                    decrementChapterRevision(exam.id, subjectIdx, chapterIdx);
-                                                  }
-                                                }}
-                                                className={`text-xs px-2 py-0.5 rounded font-semibold flex items-center gap-1 ${
-                                                  revisionsCompleted >= revisionsNeeded 
-                                                    ? 'bg-purple-100 text-purple-700' 
-                                                    : 'bg-orange-100 text-orange-700 cursor-pointer hover:opacity-80'
-                                                }`}
-                                                title={editingExam ? 'Set revision count in edit mode' : 'Click to add • Right-click or Shift+Click to remove'}
-                                                disabled={editingExam === exam.id}
-                                              >
-                                                <BookOpen className="w-3 h-3" /> {revisionsCompleted}/{revisionsNeeded}
-                                              </button>
-                                            )}
-                                            
-                                            {/* Edit Mode: Show all controls */}
-                                            {editingExam === exam.id ? (
-                                              <>
-                                                <input
-                                                  type="number"
-                                                  min="0"
-                                                  max="10"
-                                                  value={revisionsNeeded}
-                                                  onChange={(e) => {
-                                                    const newNeeded = parseInt(e.target.value) || 0;
-                                                    const newCompleted = Math.min(revisionsCompleted, newNeeded);
-                                                    updateChapterRevisions(exam.id, subjectIdx, chapterIdx, newNeeded, newCompleted);
-                                                  }}
-                                                  onClick={(e) => e.stopPropagation()}
-                                                  className="w-12 text-xs px-1 py-1 border rounded text-center"
-                                                  placeholder="Rev"
-                                                  title="Number of revisions needed"
-                                                />
-                                                <select
-                                                  value={chapter.status}
-                                                  onChange={(e) => updateChapterStatus(exam.id, subjectIdx, chapterIdx, e.target.value)}
-                                                  onClick={(e) => e.stopPropagation()}
-                                                  className={`text-xs px-2 py-1 rounded font-medium ${
-                                                    chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                    chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
-                                                    'bg-gray-100 text-gray-600'
-                                                  }`}
-                                                >
-                                                  <option value="pending">Pending</option>
-                                                  <option value="started">Started</option>
-                                                  <option value="completed">Completed</option>
-                                                </select>
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    deleteChapterFromExamSubject(exam.id, subjectIdx, chapterIdx);
-                                                  }}
-                                                  className="text-red-500 hover:text-red-700"
-                                                >
-                                                  <X className="w-3 h-3" />
-                                                </button>
-                                              </>
-                                            ) : (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  const statuses = ['pending', 'started', 'completed'];
-                                                  const currentIndex = statuses.indexOf(chapter.status);
-                                                  const nextStatus = statuses[(currentIndex + 1) % statuses.length];
-                                                  updateChapterStatus(exam.id, subjectIdx, chapterIdx, nextStatus);
-                                                }}
-                                                className={`text-xs px-2 py-0.5 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${
-                                                  chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                  chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
-                                                  'bg-gray-100 text-gray-600'
-                                                }`}
-                                                title="Click to cycle through statuses"
-                                              >
-                                                {chapter.status}
-                                              </button>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Add Chapter */}
-                                {editingExam === exam.id && (
-                                  <div className="space-y-2 mb-2">
-                                    {/* Quick select from subject's chapters */}
-                                    {(() => {
-                                      const selectedChapters = new Set((subject.chapters || []).map(ch => ch?.name));
-                                      const availableChapters = getChapterNamesForSubject(subject.subject).filter(
-                                        (chapterName) => !selectedChapters.has(chapterName)
-                                      );
+                                        } else {
+                                          const num = parseFloat(input);
+                                          if (!isNaN(num) && num >= 0 && num <= 100) {
+                                            percentage = num;
+                                          }
+                                        }
+                                      }
                                       
-                                      return availableChapters.length > 0 && (
-                                        <div>
-                                          <label className="text-xs text-gray-500 block mb-1">Quick add from {subject.subject}:</label>
-                                          <select
-                                            onChange={(e) => {
-                                              if (e.target.value) {
-                                                addChapterToExamSubject(exam.id, subjectIdx, e.target.value);
-                                                e.target.value = '';
-                                              }
-                                            }}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="w-full p-1.5 text-sm border rounded bg-white"
-                                          >
-                                            <option value="">Select a chapter...</option>
-                                            {availableChapters.map((chapterName, i) => (
-                                              <option key={i} value={chapterName}>{chapterName}</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                      );
-                                    })()}
-                                    
-                                    {/* Manual chapter input */}
-                                    <div>
-                                      <label className="text-xs text-gray-500 block mb-1">Or add manually:</label>
-                                      <div className="flex gap-2">
-                                        <input
-                                          type="text"
-                                          placeholder="Chapter name..."
-                                          onKeyPress={(e) => {
-                                            if (e.key === 'Enter' && e.target.value.trim()) {
-                                              addChapterToExamSubject(exam.id, subjectIdx, e.target.value.trim());
-                                              e.target.value = '';
-                                            }
-                                          }}
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="flex-1 p-1.5 text-sm border rounded"
-                                        />
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const input = e.target.previousSibling;
-                                            if (input.value.trim()) {
-                                              addChapterToExamSubject(exam.id, subjectIdx, input.value.trim());
-                                              input.value = '';
-                                            }
-                                          }}
-                                          className="px-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
-                                        >
-                                          Add
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Notes/Key Points */}
-                                {(editingExam === exam.id || subject.keyPoints) && (
-                                  <div>
-                                    <div className="text-xs font-semibold text-gray-600 mb-1">Notes:</div>
-                                    {editingExam === exam.id ? (
-                                      <textarea
-                                        value={subject.keyPoints || ''}
-                                        onChange={(e) => {
-                                          const updatedSubjects = [...exam.subjects];
-                                          updatedSubjects[subjectIdx] = { ...subject, keyPoints: e.target.value };
-                                          updateExam(exam.id, { subjects: updatedSubjects });
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        placeholder="Add key points or notes..."
-                                        className="w-full p-2 text-sm border rounded bg-white"
-                                        rows="2"
-                                      />
-                                    ) : (
-                                      subject.keyPoints && (
-                                        <div className="text-sm text-gray-600 whitespace-pre-line bg-gray-50 p-2 rounded">
-                                          {subject.keyPoints}
-                                        </div>
-                                      )
-                                    )}
+                                      const updatedSubjects = [...selectedExamData.subjects];
+                                      updatedSubjects[selectedSubjectIndex] = { 
+                                        ...selectedSubjectData, 
+                                        marksInput: input,
+                                        marks: percentage 
+                                      };
+                                      updateExam(selectedExamData.id, { subjects: updatedSubjects });
+                                    }}
+                                    placeholder="e.g., 45/50, 45\\50 or 90"
+                                    className="w-32 px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                                  />
+                                  {selectedSubjectData.marks != null && selectedSubjectData.marks >= 0 && (
+                                    <>
+                                      <span className="text-lg font-bold text-indigo-600">
+                                        = {selectedSubjectData.marks}%
+                                      </span>
+                                      <span className={`text-sm font-semibold px-3 py-1.5 rounded-full ${
+                                        selectedSubjectData.marks === 100 ? 'bg-green-100 text-green-700' :
+                                        selectedSubjectData.marks >= 95 ? 'bg-blue-100 text-blue-700' :
+                                        selectedSubjectData.marks >= 90 ? 'bg-purple-100 text-purple-700' :
+                                        'bg-gray-100 text-gray-600'
+                                      }`}>
+                                        {selectedSubjectData.marks === 100 ? (
+                                          <><Trophy className="w-4 h-4 inline" /> Perfect!</>
+                                        ) : selectedSubjectData.marks >= 95 ? (
+                                          <><Star className="w-4 h-4 inline" /> Excellence!</>
+                                        ) : selectedSubjectData.marks >= 90 ? (
+                                          <><Sparkles className="w-4 h-4 inline" /> Outstanding!</>
+                                        ) : selectedSubjectData.marks >= 75 ? (
+                                          <><ThumbsUp className="w-4 h-4 inline" /> Good</>
+                                        ) : selectedSubjectData.marks >= 60 ? (
+                                          <><Check className="w-4 h-4 inline" /> Pass</>
+                                        ) : (
+                                          <><BookOpen className="w-4 h-4 inline" /> Keep Learning</>
+                                        )}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                                {selectedSubjectData.marks != null && selectedSubjectData.marks >= 90 && (
+                                  <div className="text-sm text-green-600 mt-2 font-semibold flex items-center gap-2">
+                                    <Gift className="w-4 h-4" /> Bonus Points: +{selectedSubjectData.marks === 100 ? '300' : selectedSubjectData.marks >= 95 ? '200' : '100'}!
                                   </div>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
-                        )}
+                            )}
 
-                        {/* Add New Subject Section - Only visible when editing */}
-                        {editingExam === exam.id && (
-                          <div className="mt-4 p-4 bg-green-50 border-2 border-green-200 rounded-lg space-y-3">
-                            <div className="flex items-center gap-2">
-                              <Plus className="w-4 h-4 text-green-600" />
-                              <span className="text-sm font-semibold text-gray-500">Add New Subject to This Exam</span>
-                            </div>
-                            
-                            <div className="space-y-3">
-                              <select
-                                value={newExamSubject.subject}
-                                onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value, chapters: [] })}
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-full p-2 border rounded-lg text-sm"
-                              >
-                                <option value="">Select a subject...</option>
-                                {profileSubjects.map(s => (
-                                  <option key={s.id} value={s.name}>{s.name}</option>
-                                ))}
-                              </select>
-                              
-                              <input
-                                type="date"
-                                value={newExamSubject.date}
-                                onChange={(e) => setNewExamSubject({ ...newExamSubject, date: e.target.value })}
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-full p-2 border rounded-lg text-sm"
-                                placeholder="Exam date"
-                              />
-                              
-                              <div>
-                                <label className="text-xs font-medium text-gray-600 block mb-2">Chapters:</label>
+                            {/* Subject Progress */}
+                            {subjectProgress.total > 0 && (
+                              <div className="mb-6">
+                                <div className="flex items-center justify-between text-sm text-gray-700 mb-2">
+                                  <span className="font-semibold">Chapter Progress</span>
+                                  <span className="font-bold text-lg">{subjectProgress.percentage}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+                                  <div
+                                    className={`h-3 rounded-full transition-all ${
+                                      subjectProgress.percentage >= 75 ? 'bg-green-500' : 
+                                      subjectProgress.percentage >= 50 ? 'bg-yellow-500' : 
+                                      'bg-gray-400'
+                                    }`}
+                                    style={{ width: `${subjectProgress.percentage}%` }}
+                                  />
+                                </div>
+                                <div className="flex gap-4 text-sm flex-wrap">
+                                  <span className="text-green-600 flex items-center gap-1 font-medium">
+                                    <Check className="w-4 h-4" /> {subjectProgress.completed} Completed
+                                  </span>
+                                  <span className="text-blue-600 flex items-center gap-1 font-medium">
+                                    <BookOpen className="w-4 h-4" /> {subjectProgress.reviewed || 0} Reviewed
+                                  </span>
+                                  <span className="text-yellow-600 flex items-center gap-1 font-medium">
+                                    <Zap className="w-4 h-4" /> {subjectProgress.started} Started
+                                  </span>
+                                  <span className="text-gray-600 flex items-center gap-1 font-medium">
+                                    <Circle className="w-4 h-4" /> {subjectProgress.pending} Pending
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Chapters */}
+                            {selectedSubjectData.chapters && selectedSubjectData.chapters.length > 0 && (
+                              <div className="mb-6">
+                                <h4 className="text-lg font-semibold text-gray-900 mb-3">Chapters</h4>
+                                <div className="space-y-2">
+                                  {selectedSubjectData.chapters.map((chapter, chapterIdx) => {
+                                    const revisionsNeeded = chapter.revisionsNeeded ?? 0;
+                                    const revisionsCompleted = chapter.revisionsCompleted ?? 0;
+                                    
+                                    return (
+                                      <div key={chapterIdx} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-indigo-300 transition-all">
+                                        <div className="flex-1 text-base font-medium text-gray-900">{chapter.name}</div>
+                                        
+                                        {/* Revision Counter */}
+                                        {revisionsNeeded > 0 && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (!editingExam) {
+                                                if (e.shiftKey && revisionsCompleted > 0) {
+                                                  decrementChapterRevision(selectedExamData.id, selectedSubjectIndex, chapterIdx);
+                                                } else if (revisionsCompleted < revisionsNeeded) {
+                                                  incrementChapterRevision(selectedExamData.id, selectedSubjectIndex, chapterIdx);
+                                                }
+                                              }
+                                            }}
+                                            onContextMenu={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              if (!editingExam && revisionsCompleted > 0) {
+                                                decrementChapterRevision(selectedExamData.id, selectedSubjectIndex, chapterIdx);
+                                              }
+                                            }}
+                                            className={`text-sm px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 ${
+                                              revisionsCompleted >= revisionsNeeded 
+                                                ? 'bg-purple-100 text-purple-700' 
+                                                : 'bg-orange-100 text-orange-700 cursor-pointer hover:opacity-80'
+                                            }`}
+                                            title={editingExam ? 'Set revision count in edit mode' : 'Click to add • Right-click or Shift+Click to remove'}
+                                            disabled={editingExam === selectedExamData.id}
+                                          >
+                                            <BookOpen className="w-4 h-4" /> {revisionsCompleted}/{revisionsNeeded}
+                                          </button>
+                                        )}
+                                        
+                                        {/* Edit Mode Controls */}
+                                        {editingExam === selectedExamData.id ? (
+                                          <>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max="10"
+                                              value={revisionsNeeded}
+                                              onChange={(e) => {
+                                                const newNeeded = parseInt(e.target.value) || 0;
+                                                const newCompleted = Math.min(revisionsCompleted, newNeeded);
+                                                updateChapterRevisions(selectedExamData.id, selectedSubjectIndex, chapterIdx, newNeeded, newCompleted);
+                                              }}
+                                              className="w-16 text-sm px-2 py-1.5 border-2 border-gray-300 rounded-lg text-center"
+                                              placeholder="Rev"
+                                              title="Number of revisions needed"
+                                            />
+                                            <select
+                                              value={chapter.status}
+                                              onChange={(e) => updateChapterStatus(selectedExamData.id, selectedSubjectIndex, chapterIdx, e.target.value)}
+                                              className={`text-sm px-3 py-1.5 rounded-lg font-medium border-2 ${
+                                                chapter.status === 'completed' ? 'bg-green-100 text-green-700 border-green-300' :
+                                                chapter.status === 'reviewed' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                                chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                                                'bg-gray-100 text-gray-600 border-gray-300'
+                                              }`}
+                                            >
+                                              <option value="pending">Pending</option>
+                                              <option value="started">Started</option>
+                                              <option value="reviewed">Reviewed</option>
+                                              <option value="completed">Completed</option>
+                                            </select>
+                                            <select
+                                              value={chapter.studyMode || 'Full Portions'}
+                                              onChange={(e) => updateChapterStudyMode(selectedExamData.id, selectedSubjectIndex, chapterIdx, e.target.value, chapter.customStudyMode || '')}
+                                              className="text-sm px-3 py-1.5 rounded-lg font-medium border-2 bg-purple-50 text-purple-700 border-purple-300"
+                                            >
+                                              <option value="Full Portions">Full Portions</option>
+                                              <option value="Objective">Objective</option>
+                                              <option value="Custom">Custom</option>
+                                            </select>
+                                            {chapter.studyMode === 'Custom' && (
+                                              <input
+                                                type="text"
+                                                value={chapter.customStudyMode || ''}
+                                                onChange={(e) => updateChapterStudyMode(selectedExamData.id, selectedSubjectIndex, chapterIdx, 'Custom', e.target.value)}
+                                                placeholder="Custom mode..."
+                                                className="w-32 text-sm px-2 py-1.5 border-2 border-purple-300 rounded-lg"
+                                              />
+                                            )}
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteChapterFromExamSubject(selectedExamData.id, selectedSubjectIndex, chapterIdx);
+                                              }}
+                                              className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded transition-all"
+                                            >
+                                              <X className="w-4 h-4" />
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const statuses = ['pending', 'started', 'reviewed', 'completed'];
+                                                const currentIndex = statuses.indexOf(chapter.status);
+                                                const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+                                                updateChapterStatus(selectedExamData.id, selectedSubjectIndex, chapterIdx, nextStatus);
+                                              }}
+                                              className={`text-sm px-3 py-1.5 rounded-lg font-medium cursor-pointer hover:opacity-80 transition-all ${
+                                                chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                chapter.status === 'reviewed' ? 'bg-blue-100 text-blue-700' :
+                                                chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-gray-100 text-gray-600'
+                                              }`}
+                                              title="Click to cycle through statuses"
+                                            >
+                                              {chapter.status}
+                                            </button>
+                                            <span className="text-sm px-3 py-1.5 rounded-lg font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                                              {chapter.studyMode === 'Custom' && chapter.customStudyMode 
+                                                ? chapter.customStudyMode 
+                                                : chapter.studyMode || 'Full Portions'}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Add Chapter (Edit Mode Only) */}
+                            {editingExam === selectedExamData.id && (
+                              <div className="mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-lg space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <Plus className="w-5 h-5 text-green-600" />
+                                  <span className="text-sm font-semibold text-gray-700">Add Chapter</span>
+                                </div>
                                 
                                 {/* Quick select from subject's chapters */}
-                                {newExamSubject.subject && (() => {
-                                  const selectedChapters = new Set((newExamSubject.chapters || []).map(ec => ec.name));
-                                  const availableChapters = getChapterNamesForSubject(newExamSubject.subject).filter(
-                                    chapterName => !selectedChapters.has(chapterName)
+                                {(() => {
+                                  const selectedChapters = new Set((selectedSubjectData.chapters || []).map(ch => ch?.name));
+                                  const availableChapters = getChapterNamesForSubject(selectedSubjectData.subject).filter(
+                                    (chapterName) => !selectedChapters.has(chapterName)
                                   );
                                   
                                   return availableChapters.length > 0 && (
-                                    <div className="mb-2">
-                                      <label className="text-xs text-gray-500 block mb-1">Quick add from {newExamSubject.subject}:</label>
+                                    <div>
+                                      <label className="text-xs text-gray-600 block mb-1">Quick add from {selectedSubjectData.subject}:</label>
                                       <select
                                         onChange={(e) => {
                                           if (e.target.value) {
-                                            setNewExamSubject({
-                                              ...newExamSubject,
-                                              chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
-                                            });
+                                            addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, e.target.value);
                                             e.target.value = '';
                                           }
                                         }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="w-full p-1.5 border rounded-lg bg-white text-sm"
+                                        className="w-full p-2 border-2 border-gray-300 rounded-lg bg-white"
                                       >
                                         <option value="">Select a chapter...</option>
                                         {availableChapters.map((chapterName, i) => (
@@ -4844,98 +4926,256 @@ const StudyTrackerApp = ({ session }) => {
                                   );
                                 })()}
                                 
-                                {/* Manual input */}
-                                <div className="flex gap-2 mb-2">
-                                  <input
-                                    type="text"
-                                    placeholder="Or enter chapter manually..."
-                                    value={examChapterInput}
-                                    onChange={(e) => setExamChapterInput(e.target.value)}
-                                    onKeyPress={(e) => {
-                                      if (e.key === 'Enter' && examChapterInput.trim()) {
-                                        setNewExamSubject({
-                                          ...newExamSubject,
-                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
-                                        });
-                                        setExamChapterInput('');
-                                      }
-                                    }}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="flex-1 p-2 border rounded-lg text-sm"
-                                  />
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (examChapterInput.trim()) {
-                                        setNewExamSubject({
-                                          ...newExamSubject,
-                                          chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0 }]
-                                        });
-                                        setExamChapterInput('');
-                                      }
-                                    }}
-                                    className="px-3 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
-                                  >
-                                    Add
-                                  </button>
-                                </div>
-                                
-                                {/* Display added chapters */}
-                                {newExamSubject.chapters.length > 0 && (
-                                  <div className="space-y-1 mb-2">
-                                    {newExamSubject.chapters.map((ch, idx) => (
-                                      <div key={idx} className="flex items-center justify-between p-1.5 bg-white rounded text-sm border">
-                                        <span className="text-gray-500">{ch.name}</span>
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setNewExamSubject({
-                                              ...newExamSubject,
-                                              chapters: newExamSubject.chapters.filter((_, i) => i !== idx)
-                                            });
-                                          }}
-                                          className="text-red-500 hover:text-red-700"
-                                        >
-                                          <X className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                    ))}
+                                {/* Manual chapter input */}
+                                <div>
+                                  <label className="text-xs text-gray-600 block mb-1">Or add manually:</label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Chapter name..."
+                                      onKeyPress={(e) => {
+                                        if (e.key === 'Enter' && e.target.value.trim()) {
+                                          addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, e.target.value.trim());
+                                          e.target.value = '';
+                                        }
+                                      }}
+                                      className="flex-1 p-2 border-2 border-gray-300 rounded-lg"
+                                    />
+                                    <button
+                                      onClick={(e) => {
+                                        const input = e.target.previousSibling;
+                                        if (input.value.trim()) {
+                                          addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, input.value.trim());
+                                          input.value = '';
+                                        }
+                                      }}
+                                      className="px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                                    >
+                                      Add
+                                    </button>
                                   </div>
-                                )}
+                                </div>
                               </div>
-                              
-                              <textarea
-                                placeholder="Notes/Key points (optional)..."
-                                value={newExamSubject.keyPoints}
-                                onChange={(e) => setNewExamSubject({ ...newExamSubject, keyPoints: e.target.value })}
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-full p-2 border rounded-lg text-sm"
-                                rows="2"
-                              />
-                              
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await addSubjectToExistingExam(exam.id);
-                                }}
-                                className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-medium"
-                                disabled={!newExamSubject.subject}
-                              >
-                                + Add {newExamSubject.subject ? `"${newExamSubject.subject}"` : 'Subject'} to {exam.name}
-                              </button>
+                            )}
+
+                            {/* Notes/Key Points */}
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-900 mb-3">Notes & Key Points</h4>
+                              {editingExam === selectedExamData.id ? (
+                                <textarea
+                                  value={selectedSubjectData.keyPoints || ''}
+                                  onChange={(e) => {
+                                    const updatedSubjects = [...selectedExamData.subjects];
+                                    updatedSubjects[selectedSubjectIndex] = { ...selectedSubjectData, keyPoints: e.target.value };
+                                    updateExam(selectedExamData.id, { subjects: updatedSubjects });
+                                  }}
+                                  placeholder="Add key points, formulas, important topics..."
+                                  className="w-full p-3 border-2 border-gray-300 rounded-lg bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                                  rows="4"
+                                />
+                              ) : selectedSubjectData.keyPoints ? (
+                                <div className="text-base text-gray-700 whitespace-pre-line bg-white p-4 rounded-lg border border-gray-200">
+                                  {selectedSubjectData.keyPoints}
+                                </div>
+                              ) : (
+                                <div className="text-gray-400 italic bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                  No notes added yet
+                                </div>
+                              )}
                             </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                )}
+
+                {/* Add New Subject to Exam */}
+                {!showAddExam && selectedExamData && editingExam === selectedExamData.id && (!selectedExamData.subjects || selectedExamData.subjects.length === 0 || selectedSubjectIndex === null) && (
+                  <div className="glass-card rounded-lg shadow-lg p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Plus className="w-5 h-5 text-green-600" />
+                      <h3 className="text-lg font-semibold text-gray-900">Add Subject to {selectedExamData.name}</h3>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <select
+                        value={newExamSubject.subject}
+                        onChange={(e) => setNewExamSubject({ ...newExamSubject, subject: e.target.value, chapters: [] })}
+                        className="w-full p-2 border-2 border-gray-300 rounded-lg"
+                      >
+                        <option value="">Select a subject...</option>
+                        {profileSubjects.map(s => (
+                          <option key={s.id} value={s.name}>{s.name}</option>
+                        ))}
+                      </select>
+                      
+                      <input
+                        type="date"
+                        value={newExamSubject.date}
+                        onChange={(e) => setNewExamSubject({ ...newExamSubject, date: e.target.value })}
+                        className="w-full p-2 border-2 border-gray-300 rounded-lg"
+                        placeholder="Exam date"
+                      />
+                      
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-2">Chapters:</label>
+                        
+                        {/* Quick select from subject's chapters */}
+                        {newExamSubject.subject && (() => {
+                          const selectedChapters = new Set((newExamSubject.chapters || []).map(ec => ec.name));
+                          const availableChapters = getChapterNamesForSubject(newExamSubject.subject).filter(
+                            chapterName => !selectedChapters.has(chapterName)
+                          );
+                          
+                          return availableChapters.length > 0 && (
+                            <div className="mb-2">
+                              <label className="text-xs text-gray-600 block mb-1">Quick add from {newExamSubject.subject}:</label>
+                              <select
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    setNewExamSubject({
+                                      ...newExamSubject,
+                                      chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                    });
+                                    e.target.value = '';
+                                  }
+                                }}
+                                className="w-full p-2 border-2 border-gray-300 rounded-lg bg-white"
+                              >
+                                <option value="">Select a chapter...</option>
+                                {availableChapters.map((chapterName, i) => (
+                                  <option key={i} value={chapterName}>{chapterName}</option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })()}
+                        
+                        {/* Manual input */}
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            placeholder="Or enter chapter manually..."
+                            value={examChapterInput}
+                            onChange={(e) => setExamChapterInput(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter' && examChapterInput.trim()) {
+                                setNewExamSubject({
+                                  ...newExamSubject,
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                });
+                                setExamChapterInput('');
+                              }
+                            }}
+                            className="flex-1 p-2 border-2 border-gray-300 rounded-lg"
+                          />
+                          <button
+                            onClick={() => {
+                              if (examChapterInput.trim()) {
+                                setNewExamSubject({
+                                  ...newExamSubject,
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                });
+                                setExamChapterInput('');
+                              }
+                            }}
+                            className="px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        
+                        {/* Display added chapters */}
+                        {newExamSubject.chapters.length > 0 && (
+                          <div className="space-y-1 mb-2">
+                            {newExamSubject.chapters.map((ch, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                <span className="text-gray-700">{ch.name}</span>
+                                <button
+                                  onClick={() => {
+                                    setNewExamSubject({
+                                      ...newExamSubject,
+                                      chapters: newExamSubject.chapters.filter((_, i) => i !== idx)
+                                    });
+                                  }}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      
+                      <textarea
+                        placeholder="Notes/Key points (optional)..."
+                        value={newExamSubject.keyPoints}
+                        onChange={(e) => setNewExamSubject({ ...newExamSubject, keyPoints: e.target.value })}
+                        className="w-full p-2 border-2 border-gray-300 rounded-lg"
+                        rows="3"
+                      />
+                      
+                      <button
+                        onClick={async () => {
+                          await addSubjectToExistingExam(selectedExamData.id);
+                        }}
+                        className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-semibold text-lg"
+                        disabled={!newExamSubject.subject || !newExamSubject.date}
+                      >
+                        + Add {newExamSubject.subject ? `"${newExamSubject.subject}"` : 'Subject'} to {selectedExamData.name}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* No Subject Selected */}
+                {!showAddExam && selectedExamData && !selectedSubjectData && (
+                  <div className="glass-card rounded-lg shadow-lg p-12 text-center">
+                    <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400 opacity-50" />
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">No subjects yet</h3>
+                    <p className="text-gray-500 mb-4">Add subjects to this exam to start tracking your progress</p>
+                    {editingExam !== selectedExamData.id && (
+                      <button
+                        onClick={() => setEditingExam(selectedExamData.id)}
+                        className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-medium"
+                      >
+                        Edit Exam to Add Subjects
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* No Exam Selected */}
+                {!showAddExam && !selectedExamId && getUpcomingExams().length > 0 && (
+                  <div className="glass-card rounded-lg shadow-lg p-12 text-center">
+                    <Book className="w-16 h-16 mx-auto mb-4 text-gray-400 opacity-50" />
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">Select an exam to view details</h3>
+                    <p className="text-gray-500">Use the dropdown above to select an exam and view its subjects</p>
+                  </div>
+                )}
+
+                {/* No Exams At All */}
+                {!showAddExam && getUpcomingExams().length === 0 && (
+                  <div className="glass-card rounded-lg shadow-lg p-12 text-center">
+                    <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-400 opacity-50" />
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">No Exams Yet</h3>
+                    <p className="text-gray-500 mb-6">Get started by creating your first exam</p>
+                    <button
+                      onClick={() => setShowAddExam(true)}
+                      className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 inline-flex items-center gap-2 shadow-lg transition-all"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Create First Exam
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Previous Exams Section */}
+            {/* Previous Exams Section (outside split panel) */}
             {getPastExams().length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+              <div className="glass-card rounded-lg shadow-lg overflow-hidden">
                 <button
                   onClick={() => setShowPreviousExams(!showPreviousExams)}
                   className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
@@ -5036,6 +5276,7 @@ const StudyTrackerApp = ({ session }) => {
               </div>
             )}
           </div>
+        </div>
         )}
 
         {/* Analytics View */}

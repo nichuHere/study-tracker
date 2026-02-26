@@ -33,3 +33,7 @@ yarn-error.log*
 
 passwords.txt
 password.txt
+
+# Side work files
+InfoGov-*.md
+HRB_ApplicationCIDashboard-*.xlsx

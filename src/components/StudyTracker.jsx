@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Home, GraduationCap, FolderOpen, Shield, Lock, Unlock } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Home, GraduationCap, FolderOpen, Shield, Lock, Unlock, Camera } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 import Dashboard from './Dashboard';
+import BadgeCelebration from './BadgeCelebration';
+import Onboarding from './Onboarding';
+import ALL_BADGES from '../utils/badges';
 import { useProfiles, useReminders } from '../hooks';
 import { getTodayDateIST, getISTNow, convertTo12Hour, getDaysUntil } from '../utils/helpers';
 
@@ -18,6 +21,10 @@ const StudyTrackerApp = ({ session }) => {
     setNewProfileName,
     newProfileClass,
     setNewProfileClass,
+    newProfilePic,
+    setNewProfilePic,
+    newParentName,
+    setNewParentName,
     showProfileModal,
     setShowProfileModal,
     accountName,
@@ -36,12 +43,23 @@ const StudyTrackerApp = ({ session }) => {
     addProfile,
     updateProfile,
     deleteProfile,
+    createTestProfile,
     saveAccountName,
+    parentPhoto,
+    handleParentPhotoUpload,
+    removeParentPhoto,
+    parentType,
+    setParentType,
     startEditProfile: _startEditProfile,
-    cancelEditProfile: _cancelEditProfile
+    cancelEditProfile: _cancelEditProfile,
+    getProfilePic,
+    setProfilePic: _setProfilePic,
+    removeProfilePic,
+    handleProfilePicUpload
   } = useProfiles(session);
 
   const [_loading, _setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   
   // Use custom hooks for reminder management
   const {
@@ -494,6 +512,9 @@ const StudyTrackerApp = ({ session }) => {
     setExams([]);
     setViewingSubject(null);
     setMinimizedExams({});
+    // Reset badge detection so profile switch doesn't trigger celebrations
+    celebrationReadyRef.current = false;
+    prevUnlockedRef.current = null;
     setActiveProfile(profile);
     setActiveView('dashboard');
     
@@ -1973,6 +1994,115 @@ const StudyTrackerApp = ({ session }) => {
     ? selectedExamData.subjects[selectedSubjectIndex] 
     : null;
 
+  // === Badge Celebration Detection (App-Level) ===
+  // Filter data for active profile
+  const profileTasksForBadges = useMemo(() => {
+    return activeProfile ? tasks.filter(t => t.profile_id === activeProfile.id) : tasks;
+  }, [tasks, activeProfile]);
+
+  const profileSubjectsForBadges = useMemo(() => {
+    return activeProfile ? subjects.filter(s => s.profile_id === activeProfile.id) : subjects;
+  }, [subjects, activeProfile]);
+
+  // Compute badge stats from current data
+  const badgeStats = useMemo(() => {
+    const today = getTodayDateIST();
+    const todayTasks = profileTasksForBadges.filter(t => t.date === today);
+    const completedToday = todayTasks.filter(t => t.completed);
+    const totalMinutesToday = completedToday.reduce((sum, t) => sum + (t.duration || 0), 0);
+
+    // Weekly study time (last 7 days)
+    const todayDate = new Date(today);
+    const weekAgo = new Date(todayDate);
+    weekAgo.setDate(weekAgo.getDate() - 6);
+    const weekAgoStr = weekAgo.toISOString().split('T')[0];
+    const weeklyTasks = profileTasksForBadges.filter(t => t.completed && t.date >= weekAgoStr && t.date <= today);
+    const totalMinutesWeek = weeklyTasks.reduce((sum, t) => sum + (t.duration || 0), 0);
+
+    const allTasks = profileTasksForBadges;
+    const allCompleted = allTasks.filter(t => t.completed);
+    const completionRate = allTasks.length > 0
+      ? Math.round((allCompleted.length / allTasks.length) * 100)
+      : 0;
+
+    return {
+      completedToday: completedToday.length,
+      studyMinutesToday: totalMinutesToday,
+      studyMinutesWeek: totalMinutesWeek,
+      totalSubjects: profileSubjectsForBadges.length,
+      completionRate
+    };
+  }, [profileTasksForBadges, profileSubjectsForBadges]);
+
+  // Compute all badges with current unlock status
+  const allBadgesWithStatus = useMemo(() => {
+    return ALL_BADGES.map(badge => ({
+      ...badge,
+      unlocked: badge.checkUnlocked(badgeStats)
+    }));
+  }, [badgeStats]);
+
+  // Celebration state
+  const [celebrationQueue, setCelebrationQueue] = useState([]);
+  const [currentCelebration, setCurrentCelebration] = useState(null);
+  const prevUnlockedRef = useRef(null);
+  const celebrationReadyRef = useRef(false);
+
+  // Keep a ref to the latest allBadgesWithStatus so the grace-period timer
+  // reads the CURRENT value instead of a stale closure from when the effect ran.
+  const allBadgesWithStatusRef = useRef(allBadgesWithStatus);
+  allBadgesWithStatusRef.current = allBadgesWithStatus;
+
+  // Wait for initial data to fully load before enabling celebration detection.
+  // This prevents false celebrations on app refresh / profile switch.
+  useEffect(() => {
+    celebrationReadyRef.current = false;
+    prevUnlockedRef.current = null;
+    const timer = setTimeout(() => {
+      // Snapshot current state THEN enable detection
+      // Read from ref to get the LATEST computed value, not the stale closure
+      const currentUnlocked = new Set(
+        allBadgesWithStatusRef.current.filter(b => b.unlocked).map(b => b.id)
+      );
+      prevUnlockedRef.current = currentUnlocked;
+      celebrationReadyRef.current = true;
+    }, 3000); // 3 second startup grace period
+    return () => clearTimeout(timer);
+    // Only re-run when activeProfile changes (profile switch), NOT on every badge update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id]);
+
+  // Detect newly unlocked badges — only after the grace period
+  useEffect(() => {
+    if (!celebrationReadyRef.current) return;
+    if (!prevUnlockedRef.current) return;
+
+    const currentUnlocked = new Set(
+      allBadgesWithStatus.filter(b => b.unlocked).map(b => b.id)
+    );
+
+    const newlyUnlocked = allBadgesWithStatus.filter(
+      b => b.unlocked && !prevUnlockedRef.current.has(b.id)
+    );
+    if (newlyUnlocked.length > 0) {
+      setCelebrationQueue(prev => [...prev, ...newlyUnlocked]);
+    }
+
+    prevUnlockedRef.current = currentUnlocked;
+  }, [allBadgesWithStatus]);
+
+  // Process celebration queue — show one at a time
+  useEffect(() => {
+    if (!currentCelebration && celebrationQueue.length > 0) {
+      setCurrentCelebration(celebrationQueue[0]);
+      setCelebrationQueue(prev => prev.slice(1));
+    }
+  }, [currentCelebration, celebrationQueue]);
+
+  const handleCelebrationClose = useCallback(() => {
+    setCurrentCelebration(null);
+  }, []);
+
   return (
     <div className="min-h-screen">
       {/* Top Navigation Bar - EduMaster style */}
@@ -2003,8 +2133,12 @@ const StudyTrackerApp = ({ session }) => {
                     onClick={() => setShowSidebar(!showSidebar)}
                     className="flex items-center gap-1 sm:gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105"
                   >
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 bg-white/20 rounded-full flex items-center justify-center">
-                      <User className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
+                      {getProfilePic(activeProfile.id) ? (
+                        <img src={getProfilePic(activeProfile.id)} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                      )}
                     </div>
                     <span className="font-medium text-xs sm:text-sm max-w-[60px] sm:max-w-none truncate">{activeProfile.name}</span>
                     <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 transition-transform flex-shrink-0 ${showSidebar ? 'rotate-180' : ''}`} />
@@ -2032,12 +2166,16 @@ const StudyTrackerApp = ({ session }) => {
                                   : 'hover:bg-white/40'
                               }`}
                             >
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold overflow-hidden ${
                                 activeProfile?.id === profile.id
                                   ? 'bg-white/20 text-white'
                                   : 'bg-gradient-to-br from-rose-400 to-purple-500 text-white'
                               }`}>
-                                {profile.name.charAt(0).toUpperCase()}
+                                {getProfilePic(profile.id) ? (
+                                  <img src={getProfilePic(profile.id)} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  profile.name.charAt(0).toUpperCase()
+                                )}
                               </div>
                               <div className="text-left flex-1">
                                 <div className="font-semibold">{profile.name}</div>
@@ -2282,37 +2420,26 @@ const StudyTrackerApp = ({ session }) => {
         )}
         <div className={`max-w-6xl mx-auto${_loading ? ' opacity-30 pointer-events-none select-none' : ''}`}>
         {/* Profile Selector */}
-        {!_loading && profiles.length === 0 ? (
-          <div className="glass-card rounded-2xl shadow-glass-xl p-8 mb-4 text-center border border-white/40">
-            <div className="w-16 h-16 bg-gradient-to-br from-rose-400 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <GraduationCap className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent mb-4">Welcome to Kannama Study Tracker!</h2>
-            <p className="text-gray-600 mb-6 font-medium">Create a profile for your first child to get started</p>
-            
-            <div className="max-w-md mx-auto space-y-3">
-              <input
-                type="text"
-                placeholder="Child's name"
-                value={newProfileName}
-                onChange={(e) => setNewProfileName(e.target.value)}
-                className="w-full p-3 glass-white border-2 border-white/40 rounded-xl focus:border-rose-400 focus:outline-none shadow-sm"
-              />
-              <input
-                type="text"
-                placeholder="Class/Grade (e.g., Grade 5)"
-                value={newProfileClass}
-                onChange={(e) => setNewProfileClass(e.target.value)}
-                className="w-full p-3 glass-white border-2 border-white/40 rounded-xl focus:border-rose-400 focus:outline-none shadow-sm"
-              />
-              <button
-                onClick={addProfile}
-                className="w-full bg-gradient-to-r from-rose-500 to-purple-500 text-white py-3 rounded-xl hover:from-rose-600 hover:to-purple-600 font-bold shadow-glass-lg hover:shadow-glass-xl transition-all transform hover:scale-105"
-              >
-                Create Profile
-              </button>
-            </div>
-          </div>
+        {!_loading && (profiles.length === 0 || showOnboarding) ? (
+          <Onboarding
+            session={session}
+            setParentType={setParentType}
+            parentType={parentType}
+            parentPhoto={parentPhoto}
+            handleParentPhotoUpload={handleParentPhotoUpload}
+            accountName={accountName}
+            setNewProfileName={setNewProfileName}
+            setNewProfileClass={setNewProfileClass}
+            setNewProfilePic={setNewProfilePic}
+            setNewParentName={setNewParentName}
+            addProfile={addProfile}
+            newProfileName={newProfileName}
+            newProfileClass={newProfileClass}
+            newParentName={newParentName}
+            handleProfilePicUpload={handleProfilePicUpload}
+            isTestMode={showOnboarding && profiles.length > 0}
+            onComplete={() => setShowOnboarding(false)}
+          />
         ) : (
           <>
             {/* Profile Switch Indicator */}
@@ -2433,6 +2560,8 @@ const StudyTrackerApp = ({ session }) => {
                   setShowAddProfile(false);
                   setNewProfileName('');
                   setNewProfileClass('');
+                  setNewParentName('');
+                  setNewProfilePic(null);
                 }} />
                 <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
                   <div className="flex items-center justify-between mb-4">
@@ -2442,12 +2571,42 @@ const StudyTrackerApp = ({ session }) => {
                         setShowAddProfile(false);
                         setNewProfileName('');
                         setNewProfileClass('');
+                        setNewProfilePic(null);
                       }}
                       className="p-1.5 hover:bg-gray-100 rounded-full"
                     >
                       <X className="w-5 h-5 text-gray-500" />
                     </button>
                   </div>
+                  {/* Profile Photo Picker */}
+                  <div className="flex justify-center mb-4">
+                    <div className="relative group">
+                      <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white font-bold text-2xl border-4 border-white shadow-lg">
+                        {newProfilePic ? (
+                          <img src={newProfilePic} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          newProfileName ? newProfileName.charAt(0).toUpperCase() : '?'
+                        )}
+                      </div>
+                      <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center rounded-full">
+                        <span className="text-white text-sm">📷</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => setNewProfilePic(reader.result);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 text-center mb-3">Hover over circle to add a photo</p>
                   <input
                     type="text"
                     placeholder="Child's name"
@@ -2461,6 +2620,13 @@ const StudyTrackerApp = ({ session }) => {
                     placeholder="Class/Grade (e.g., Grade 5)"
                     value={newProfileClass}
                     onChange={(e) => setNewProfileClass(e.target.value)}
+                    className="w-full p-3 mb-3 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="What does your child call you? (e.g., Amma, Mamma, Mom)"
+                    value={newParentName}
+                    onChange={(e) => setNewParentName(e.target.value)}
                     className="w-full p-3 mb-4 border-2 border-amber-200 rounded-xl focus:border-rose-400 focus:outline-none"
                   />
                   <div className="flex gap-2">
@@ -2479,11 +2645,29 @@ const StudyTrackerApp = ({ session }) => {
                         setShowAddProfile(false);
                         setNewProfileName('');
                         setNewProfileClass('');
+                        setNewParentName('');
+                        setNewProfilePic(null);
                       }}
                       className="px-4 bg-gray-100 text-gray-600 rounded-xl font-medium hover:bg-gray-200"
                     >
                       Cancel
                     </button>
+                  </div>
+                  
+                  {/* Test Profile Shortcut */}
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <button
+                      onClick={async () => {
+                        await createTestProfile();
+                        setShowAddProfile(false);
+                      }}
+                      className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-xl font-medium text-sm hover:from-amber-500 hover:to-orange-600 transition-all flex items-center justify-center gap-2 shadow-md"
+                    >
+                      🧪 Create Test Profile (with sample data)
+                    </button>
+                    <p className="text-[10px] text-gray-400 text-center mt-1.5">
+                      Creates "Tester" profile with 6 subjects, 26 tasks, and pre-earned badges
+                    </p>
                   </div>
                 </div>
               </div>
@@ -2866,6 +3050,55 @@ const StudyTrackerApp = ({ session }) => {
                                   : 'Simple checkbox with automatic metadata tracking'}
                               </p>
                             </div>
+                            {/* Parent Name */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">What does {profile.name} call you?</label>
+                              <input
+                                type="text"
+                                value={editProfileData.parent_name}
+                                onChange={(e) => setEditProfileData({ ...editProfileData, parent_name: e.target.value })}
+                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="e.g., Amma, Mamma, Mom, Dad"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Used in badge celebration messages
+                              </p>
+                            </div>
+                            {/* Profile Photo */}}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Profile Photo</label>
+                              <div className="flex items-center gap-3">
+                                <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+                                  {getProfilePic(profile.id) ? (
+                                    <img src={getProfilePic(profile.id)} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    profile.name.charAt(0).toUpperCase()
+                                  )}
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                  <label className="px-3 py-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 font-medium text-xs cursor-pointer text-center">
+                                    📷 Upload Photo
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (file) await handleProfilePicUpload(file, profile.id);
+                                      }}
+                                    />
+                                  </label>
+                                  {getProfilePic(profile.id) && (
+                                    <button
+                                      onClick={() => removeProfilePic(profile.id)}
+                                      className="px-3 py-1.5 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 font-medium text-xs"
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                             <div className="flex gap-2 pt-2">
                               <button
                                 onClick={() => updateProfile(profile.id)}
@@ -2876,7 +3109,7 @@ const StudyTrackerApp = ({ session }) => {
                               <button
                                 onClick={() => {
                                   setEditingProfile(null);
-                                  setEditProfileData({ name: '', class: '', chapter_tracking_mode: 'smart' });
+                                  setEditProfileData({ name: '', class: '', chapter_tracking_mode: 'smart', parent_name: '' });
                                 }}
                                 className="px-4 py-2 bg-gray-200 text-gray-500 rounded-lg hover:bg-gray-300 font-medium"
                               >
@@ -2914,16 +3147,39 @@ const StudyTrackerApp = ({ session }) => {
                         ) : (
                           // View mode
                           <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-semibold text-gray-500">{profile.name}</h4>
-                                {activeProfile?.id === profile.id && (
-                                  <span className="px-2 py-0.5 bg-indigo-400 text-white text-xs rounded-full">Active</span>
+                            <div className="flex items-center gap-3 flex-1">
+                              {/* Profile Avatar */}
+                              <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-gradient-to-br from-rose-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg relative group">
+                                {getProfilePic(profile.id) ? (
+                                  <img src={getProfilePic(profile.id)} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  profile.name.charAt(0).toUpperCase()
                                 )}
+                                {/* Upload overlay on hover */}
+                                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center rounded-full">
+                                  <span className="text-white text-xs">📷</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files[0];
+                                      if (file) await handleProfilePicUpload(file, profile.id);
+                                    }}
+                                  />
+                                </label>
                               </div>
-                              <p className="text-sm text-gray-600 mt-0.5">
-                                {profile.class || 'Grade not set'}
-                              </p>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-semibold text-gray-500">{profile.name}</h4>
+                                  {activeProfile?.id === profile.id && (
+                                    <span className="px-2 py-0.5 bg-indigo-400 text-white text-xs rounded-full">Active</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-600 mt-0.5">
+                                  {profile.class || 'Grade not set'}
+                                </p>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               {activeProfile?.id !== profile.id && (
@@ -2940,7 +3196,8 @@ const StudyTrackerApp = ({ session }) => {
                                   setEditProfileData({ 
                                     name: profile.name, 
                                     class: profile.class || '',
-                                    chapter_tracking_mode: profile.chapter_tracking_mode || 'smart'
+                                    chapter_tracking_mode: profile.chapter_tracking_mode || 'smart',
+                                    parent_name: profile.parent_name || ''
                                   });
                                 }}
                                 className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg"
@@ -2975,6 +3232,73 @@ const StudyTrackerApp = ({ session }) => {
                 {/* Account Settings Tab */}
                 {profileTab === 'account' && (
                   <div className="space-y-6">
+                    {/* Parent Type Selection */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-gray-500">I am a...</label>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setParentType('mother')}
+                          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm transition-all border-2 ${
+                            parentType === 'mother'
+                              ? 'border-pink-400 bg-pink-50 text-pink-700 shadow-sm'
+                              : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-lg">👩</span> Mother
+                        </button>
+                        <button
+                          onClick={() => setParentType('father')}
+                          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm transition-all border-2 ${
+                            parentType === 'father'
+                              ? 'border-blue-400 bg-blue-50 text-blue-700 shadow-sm'
+                              : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-lg">👨</span> Father
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500">Used for default celebration image and name when not customized</p>
+                    </div>
+
+                    {/* Parent Photo Section */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-gray-500">Celebration Photo</label>
+                      <p className="text-xs text-gray-500 mb-2">This photo appears during badge celebrations instead of the default image</p>
+                      <div className="flex items-center gap-4">
+                        {/* Photo preview */}
+                        <div className="relative w-20 h-20 rounded-full overflow-hidden border-3 border-indigo-200 bg-gray-100 flex-shrink-0">
+                          {parentPhoto ? (
+                            <img src={parentPhoto} alt="Parent" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-300">
+                              <Camera className="w-8 h-8" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="px-4 py-2 bg-indigo-400 text-white rounded-lg hover:bg-indigo-500 cursor-pointer text-sm font-medium text-center">
+                            {parentPhoto ? 'Change Photo' : 'Upload Photo'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                if (e.target.files[0]) handleParentPhotoUpload(e.target.files[0]);
+                              }}
+                            />
+                          </label>
+                          {parentPhoto && (
+                            <button
+                              onClick={removeParentPhoto}
+                              className="px-4 py-2 bg-rose-100 text-rose-500 rounded-lg hover:bg-rose-200 text-sm font-medium"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Account Name Section */}
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-gray-500">Account Name</label>
@@ -3046,6 +3370,21 @@ const StudyTrackerApp = ({ session }) => {
                         </p>
                       </div>
                     </div>
+
+                    {/* Test Onboarding */}
+                    <div className="space-y-2 pt-4 border-t">
+                      <label className="block text-sm font-semibold text-gray-500">Onboarding</label>
+                      <button
+                        onClick={() => {
+                          setShowProfileModal(false);
+                          setShowOnboarding(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-amber-100 to-orange-100 border-2 border-orange-200 text-orange-600 hover:border-orange-400 font-medium text-sm transition-all hover:shadow-md"
+                      >
+                        🧪 Preview Onboarding Flow
+                      </button>
+                      <p className="text-xs text-gray-500">Preview the onboarding wizard without creating a new account</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -3088,6 +3427,7 @@ const StudyTrackerApp = ({ session }) => {
             subjects={subjects}
             profiles={profiles}
             activeProfile={activeProfile}
+            onTestCelebration={(badge) => setCurrentCelebration(badge)}
           />
         )}
 
@@ -4339,7 +4679,7 @@ const StudyTrackerApp = ({ session }) => {
                           const lastCompletedTask = chapterTasks.filter(t => t.completed).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
                           const dynamicLastStudied = lastCompletedTask ? lastCompletedTask.date : normalizedChapter.lastStudied;
                           const statusColor = {
-                            pending: 'bg-gray-100 text-gray-600 border-gray-300',
+                            pending: 'bg-red-50 text-red-600 border-red-300 border-dashed',
                             started: 'bg-yellow-100 text-yellow-700 border-yellow-300',
                             self_study_done: 'bg-teal-100 text-teal-700 border-teal-300',
                             reviewed: 'bg-blue-100 text-blue-700 border-blue-300',
@@ -4365,7 +4705,7 @@ const StudyTrackerApp = ({ session }) => {
                                       normalizedChapter.status === 'reviewed' ? 'bg-blue-100 text-blue-700 border-blue-300' :
                                       normalizedChapter.status === 'self_study_done' ? 'bg-teal-100 text-teal-700 border-teal-300' :
                                       normalizedChapter.status === 'started' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
-                                      'bg-gray-100 text-gray-600 border-gray-300'
+                                      'bg-red-50 text-red-600 border-red-300'
                                     }`}
                                     title="Click to cycle: Pending → Started → Self Study Done → Reviewed → Completed"
                                   >
@@ -6962,6 +7302,17 @@ const StudyTrackerApp = ({ session }) => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Badge Celebration Overlay — renders on ANY tab */}
+      {currentCelebration && (
+        <BadgeCelebration
+          badge={currentCelebration}
+          parentPhoto={parentPhoto}
+          parentType={parentType}
+          parentName={activeProfile?.parent_name || (parentType === 'father' ? 'Father' : 'Mother')}
+          onClose={handleCelebrationClose}
+        />
       )}
     </div>
   );

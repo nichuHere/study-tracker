@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Home, GraduationCap, FolderOpen } from 'lucide-react';
+import { Calendar, Clock, Plus, Trash2, Edit2, CheckCircle, Circle, Mic, X, Book, Target, TrendingUp, AlertCircle, LogOut, User, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Repeat, FileText, Flame, Zap, Check, Trophy, Star, Sparkles, ThumbsUp, Gift, BookOpen, BarChart3, LineChart, Home, GraduationCap, FolderOpen, Shield, Lock, Unlock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SchoolDocuments from './SchoolDocuments';
 import Dashboard from './Dashboard';
@@ -69,6 +69,17 @@ const StudyTrackerApp = ({ session }) => {
     startEditRecurringReminder
   } = useReminders(activeProfile);
   
+  // Admin Mode
+  const ADMIN_PIN = '0000';
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const [adminTimeout, setAdminTimeout] = useState(null);
+  const [editingTaskDate, setEditingTaskDate] = useState(null);
+  const [editingTaskName, setEditingTaskName] = useState(null);
+  const [editTaskFields, setEditTaskFields] = useState({ subject: '', activity: '', chapter: '', instructions: '' });
+
   // Shared activities across all kids
   const [sharedActivities, setSharedActivities] = useState([]);
   const [showSharedActivities, setShowSharedActivities] = useState(false);
@@ -90,6 +101,8 @@ const StudyTrackerApp = ({ session }) => {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddExam, setShowAddExam] = useState(false);
   const [showAddReminder, setShowAddReminder] = useState(false);
+  const [showCalendarAddReminder, setShowCalendarAddReminder] = useState(false);
+  const [calendarReminderType, setCalendarReminderType] = useState('one-time');
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showActivitiesManager, setShowActivitiesManager] = useState(false);
@@ -125,6 +138,7 @@ const StudyTrackerApp = ({ session }) => {
     keyPoints: ''
   });
   const [examChapterInput, setExamChapterInput] = useState('');
+  const [examChapterExamOnly, setExamChapterExamOnly] = useState(false);
   const [editingExam, setEditingExam] = useState(null);
   const [minimizedExams, setMinimizedExams] = useState({});
   const [selectedExamId, setSelectedExamId] = useState(null);
@@ -218,6 +232,39 @@ const StudyTrackerApp = ({ session }) => {
     }
   }, [selectedExamId, activeView]);
 
+  // Admin mode auto-timeout (10 minutes)
+  useEffect(() => {
+    if (isAdminMode) {
+      if (adminTimeout) clearTimeout(adminTimeout);
+      const timeout = setTimeout(() => {
+        setIsAdminMode(false);
+        setEditingTaskDate(null);
+      }, 10 * 60 * 1000); // 10 minutes
+      setAdminTimeout(timeout);
+      return () => clearTimeout(timeout);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminMode]);
+
+  // Admin PIN handler
+  const handlePinSubmit = () => {
+    if (pinInput === ADMIN_PIN) {
+      setIsAdminMode(true);
+      setShowPinModal(false);
+      setPinInput('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPinInput('');
+    }
+  };
+
+  const exitAdminMode = () => {
+    setIsAdminMode(false);
+    setEditingTaskDate(null);
+    if (adminTimeout) clearTimeout(adminTimeout);
+  };
+
   // Process task rollover - move incomplete tasks from previous days to today
   const processTaskRollover = async (tasks, _profileId) => {
     const today = getTodayDateIST();
@@ -277,7 +324,124 @@ const StudyTrackerApp = ({ session }) => {
         supabase.from('standard_activities').select('*').eq('profile_id', profileId) // Profile-specific activities
       ]);
 
-      setSubjects(subjectsResult.data || []);
+      let subjectsData = subjectsResult.data || [];
+      const examsData = examsResult.data || [];
+
+      // Debug: log exam notes status
+      const profileExamsDebug = examsData.filter(e => e.profile_id === profileId);
+      const examsWithNotes = profileExamsDebug.filter(e => 
+        e.subjects?.some(s => s.keyPoints && s.keyPoints.trim())
+      );
+      console.log(`📝 Exam notes check: ${examsWithNotes.length}/${profileExamsDebug.length} exams have notes`,
+        examsWithNotes.map(e => ({ name: e.name, notes: e.subjects.filter(s => s.keyPoints).map(s => ({ subject: s.subject, keyPoints: s.keyPoints })) }))
+      );
+
+      // One-time migration: sync all existing exam chapters to their respective subjects
+      const migrationKey = `exam_chapters_migrated_${profileId}`;
+      if (!localStorage.getItem(migrationKey)) {
+        try {
+          const profileExamsData = examsData.filter(e => e.profile_id === profileId);
+          const profileSubjectsData = subjectsData.filter(s => s.profile_id === profileId);
+          const trackingMode = activeProfile?.chapter_tracking_mode || 'smart';
+          const subjectUpdates = new Map(); // subjectId -> updated chapters array
+
+          for (const exam of profileExamsData) {
+            for (const examSubject of (exam.subjects || [])) {
+              const matchingSubject = profileSubjectsData.find(s => s.name === examSubject.subject);
+              if (!matchingSubject) continue;
+
+              // Start with existing updates or current chapters
+              let currentChapters = subjectUpdates.get(matchingSubject.id) || [...(matchingSubject.chapters || [])];
+
+              for (const examChapter of (examSubject.chapters || [])) {
+                if (examChapter.examOnly) continue; // Skip exam-only chapters
+                const chapterName = examChapter.name || examChapter;
+                if (!chapterName) continue;
+
+                const alreadyExists = currentChapters.some(ch => {
+                  const name = typeof ch === 'string' ? ch : ch.name;
+                  return name?.toLowerCase() === chapterName.toLowerCase();
+                });
+
+                if (!alreadyExists) {
+                  currentChapters.push(normalizeChapter(chapterName, trackingMode));
+                }
+              }
+
+              subjectUpdates.set(matchingSubject.id, currentChapters);
+            }
+          }
+
+          // Batch update subjects in Supabase
+          for (const [subjectId, updatedChapters] of subjectUpdates) {
+            await supabase.from('subjects').update({ chapters: updatedChapters }).eq('id', subjectId);
+          }
+
+          // Update local data with migrated chapters
+          if (subjectUpdates.size > 0) {
+            subjectsData = subjectsData.map(s =>
+              subjectUpdates.has(s.id) ? { ...s, chapters: subjectUpdates.get(s.id) } : s
+            );
+            console.log(`✅ Migrated exam chapters to ${subjectUpdates.size} subject(s)`);
+          }
+
+          localStorage.setItem(migrationKey, 'true');
+        } catch (migrationError) {
+          console.error('Error during exam chapter migration:', migrationError);
+        }
+      }
+
+      // Cleanup: remove exam-only chapters that leaked into subjects
+      // Runs every load to keep subjects in sync when examOnly flags change
+      try {
+        const profileExamsData = examsData.filter(e => e.profile_id === profileId);
+        // Collect all exam-only chapter names per subject
+        const examOnlyMap = new Map(); // subjectName -> Set of chapter names
+        for (const exam of profileExamsData) {
+          for (const examSubject of (exam.subjects || [])) {
+            for (const ch of (examSubject.chapters || [])) {
+              if (ch.examOnly) {
+                if (!examOnlyMap.has(examSubject.subject)) examOnlyMap.set(examSubject.subject, new Set());
+                examOnlyMap.get(examSubject.subject).add((ch.name || '').toLowerCase());
+              }
+            }
+          }
+        }
+
+        if (examOnlyMap.size > 0) {
+          const profileSubjectsData = subjectsData.filter(s => s.profile_id === profileId);
+          const cleanupUpdates = new Map();
+
+          for (const [subjectName, examOnlyNames] of examOnlyMap) {
+            const subject = profileSubjectsData.find(s => s.name === subjectName);
+            if (!subject || !subject.chapters?.length) continue;
+
+            const cleaned = subject.chapters.filter(ch => {
+              const name = (typeof ch === 'string' ? ch : ch.name || '').toLowerCase();
+              return !examOnlyNames.has(name);
+            });
+
+            if (cleaned.length < subject.chapters.length) {
+              cleanupUpdates.set(subject.id, cleaned);
+            }
+          }
+
+          for (const [subjectId, cleanedChapters] of cleanupUpdates) {
+            await supabase.from('subjects').update({ chapters: cleanedChapters }).eq('id', subjectId);
+          }
+
+          if (cleanupUpdates.size > 0) {
+            subjectsData = subjectsData.map(s =>
+              cleanupUpdates.has(s.id) ? { ...s, chapters: cleanupUpdates.get(s.id) } : s
+            );
+            console.log(`🧹 Cleaned exam-only chapters from ${cleanupUpdates.size} subject(s)`);
+          }
+        }
+      } catch (cleanupError) {
+        console.error('Error cleaning exam-only chapters:', cleanupError);
+      }
+
+      setSubjects(subjectsData);
       
       // Process task rollover for incomplete tasks from previous days
       // Only process for the active profile
@@ -288,7 +452,6 @@ const StudyTrackerApp = ({ session }) => {
       const otherTasks = tasksData.filter(t => t.profile_id !== profileId);
       setTasks([...updatedProfileTasks, ...otherTasks]);
       
-      const examsData = examsResult.data || [];
       console.log('📚 Loading exams from database:', examsData);
       setExams(examsData);
       // Initialize all exams as minimized
@@ -692,6 +855,93 @@ const StudyTrackerApp = ({ session }) => {
     }
   };
 
+  // Sync a chapter from exam to its corresponding subject (if not already present)
+  const syncChapterToSubject = async (subjectName, chapterName) => {
+    if (!subjectName || !chapterName?.trim()) return;
+    
+    const subject = subjects.find(s => s.profile_id === activeProfile?.id && s.name === subjectName);
+    if (!subject) return;
+    
+    // Check if chapter already exists in the subject
+    const existingChapters = subject.chapters || [];
+    const chapterExists = existingChapters.some(ch => {
+      const name = typeof ch === 'string' ? ch : ch.name;
+      return name?.toLowerCase() === chapterName.trim().toLowerCase();
+    });
+    
+    if (chapterExists) return;
+    
+    // Add chapter to the subject using existing function
+    await addChapterToSubject(subject.id, chapterName.trim());
+  };
+
+  // Remove a chapter from the matching subject when deleted from an exam
+  const removeChapterFromSubject = async (subjectName, chapterName) => {
+    if (!subjectName || !chapterName) return;
+    
+    const subject = subjects.find(s => s.profile_id === activeProfile?.id && s.name === subjectName);
+    if (!subject) return;
+    
+    const existingChapters = subject.chapters || [];
+    const updatedChapters = existingChapters.filter(ch => {
+      const name = typeof ch === 'string' ? ch : ch.name;
+      return name?.toLowerCase() !== chapterName.toLowerCase();
+    });
+    
+    if (updatedChapters.length === existingChapters.length) return; // nothing to remove
+    
+    try {
+      const { error } = await supabase
+        .from('subjects')
+        .update({ chapters: updatedChapters })
+        .eq('id', subject.id);
+      
+      if (error) throw error;
+      
+      const updated = subjects.map(s =>
+        s.id === subject.id ? { ...s, chapters: updatedChapters } : s
+      );
+      setSubjects(updated);
+      if (viewingSubject?.id === subject.id) {
+        setViewingSubject({ ...viewingSubject, chapters: updatedChapters });
+      }
+    } catch (error) {
+      console.error('Error removing chapter from subject:', error);
+    }
+  };
+
+  // Remove a chapter from all exams that reference the given subject+chapter
+  const removeChapterFromExams = async (subjectName, chapterName) => {
+    if (!subjectName || !chapterName) return;
+    
+    const profileExamsList = exams.filter(e => e.profile_id === activeProfile?.id);
+    
+    for (const exam of profileExamsList) {
+      const examSubject = (exam.subjects || []).find(s => s.subject === subjectName);
+      if (!examSubject) continue;
+      
+      const hasChapter = (examSubject.chapters || []).some(ch => {
+        const name = typeof ch === 'string' ? ch : ch.name;
+        return name?.toLowerCase() === chapterName.toLowerCase();
+      });
+      
+      if (!hasChapter) continue;
+      
+      const updatedSubjects = exam.subjects.map(s => {
+        if (s.subject !== subjectName) return s;
+        return {
+          ...s,
+          chapters: (s.chapters || []).filter(ch => {
+            const name = typeof ch === 'string' ? ch : ch.name;
+            return name?.toLowerCase() !== chapterName.toLowerCase();
+          })
+        };
+      });
+      
+      await updateExam(exam.id, { subjects: updatedSubjects });
+    }
+  };
+
   const profileSubjects = activeProfile
     ? subjects.filter(s => s.profile_id === activeProfile.id)
     : [];
@@ -785,6 +1035,44 @@ const StudyTrackerApp = ({ session }) => {
       setTasks(updated);
     } catch (error) {
       console.error('Error toggling task:', error);
+    }
+  };
+
+  // Admin: Update task date
+  const updateTaskDate = async (id, newDate) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ date: newDate })
+        .eq('id', id);
+      if (!error) {
+        setTasks(tasks.map(t => t.id === id ? { ...t, date: newDate } : t));
+        setEditingTaskDate(null);
+      }
+    } catch (err) {
+      console.error('Error updating task date:', err);
+    }
+  };
+
+  // Admin: Update task fields (name, activity, chapter, instructions)
+  const updateTaskFields = async (id) => {
+    try {
+      const updates = {};
+      if (editTaskFields.subject) updates.subject = editTaskFields.subject;
+      if (editTaskFields.activity !== undefined) updates.activity = editTaskFields.activity;
+      if (editTaskFields.chapter !== undefined) updates.chapter = editTaskFields.chapter;
+      if (editTaskFields.instructions !== undefined) updates.instructions = editTaskFields.instructions;
+      const { error } = await supabase
+        .from('tasks')
+        .update(updates)
+        .eq('id', id);
+      if (!error) {
+        setTasks(tasks.map(t => t.id === id ? { ...t, ...updates } : t));
+        setEditingTaskName(null);
+        setEditTaskFields({ subject: '', activity: '', chapter: '', instructions: '' });
+      }
+    } catch (err) {
+      console.error('Error updating task fields:', err);
     }
   };
 
@@ -942,7 +1230,7 @@ const StudyTrackerApp = ({ session }) => {
     }
   };
 
-  const addChapterToExamSubject = async (examId, subjectIndex, chapterName) => {
+  const addChapterToExamSubject = async (examId, subjectIndex, chapterName, examOnly = false) => {
     if (!chapterName.trim()) return;
     
     try {
@@ -958,11 +1246,18 @@ const StudyTrackerApp = ({ session }) => {
           revisionsNeeded: 0,
           revisionsCompleted: 0,
           studyMode: 'Full Portions',
-          customStudyMode: ''
+          customStudyMode: '',
+          examOnly: examOnly
         }]
       };
       
       await updateExam(examId, { subjects: updatedSubjects });
+      
+      // Sync chapter to the corresponding subject (skip exam-only)
+      if (!examOnly) {
+        const subjectName = updatedSubjects[subjectIndex].subject;
+        await syncChapterToSubject(subjectName, chapterName);
+      }
     } catch (error) {
       console.error('Error adding chapter:', error);
     }
@@ -1063,11 +1358,21 @@ const StudyTrackerApp = ({ session }) => {
       const exam = exams.find(e => e.id === examId);
       if (!exam) return;
       
+      const chapter = exam.subjects[subjectIndex].chapters[chapterIndex];
+      const chapterName = chapter?.name;
+      const subjectName = exam.subjects[subjectIndex].subject;
+      const isExamOnly = chapter?.examOnly;
+      
       const updatedSubjects = [...exam.subjects];
       const updatedChapters = updatedSubjects[subjectIndex].chapters.filter((_, i) => i !== chapterIndex);
       updatedSubjects[subjectIndex] = { ...updatedSubjects[subjectIndex], chapters: updatedChapters };
       
       await updateExam(examId, { subjects: updatedSubjects });
+      
+      // Also remove from the corresponding subject (skip exam-only)
+      if (chapterName && subjectName && !isExamOnly) {
+        await removeChapterFromSubject(subjectName, chapterName);
+      }
     } catch (error) {
       console.error('Error deleting chapter:', error);
     }
@@ -1087,11 +1392,12 @@ const StudyTrackerApp = ({ session }) => {
   };
 
   const getExamProgress = (exam) => {
-    if (!exam.subjects || exam.subjects.length === 0) return { pending: 0, started: 0, reviewed: 0, completed: 0, percentage: 0 };
+    if (!exam.subjects || exam.subjects.length === 0) return { pending: 0, started: 0, selfStudyDone: 0, reviewed: 0, completed: 0, percentage: 0 };
     
     let totalChapters = 0;
     let pending = 0;
     let started = 0;
+    let selfStudyDone = 0;
     let reviewed = 0;
     let completed = 0;
     
@@ -1100,6 +1406,7 @@ const StudyTrackerApp = ({ session }) => {
         totalChapters += subject.chapters.length;
         pending += subject.chapters.filter(c => c.status === 'pending').length;
         started += subject.chapters.filter(c => c.status === 'started').length;
+        selfStudyDone += subject.chapters.filter(c => c.status === 'self_study_done').length;
         reviewed += subject.chapters.filter(c => c.status === 'reviewed').length;
         completed += subject.chapters.filter(c => c.status === 'completed').length;
       }
@@ -1107,7 +1414,7 @@ const StudyTrackerApp = ({ session }) => {
     
     const percentage = totalChapters > 0 ? Math.round((completed / totalChapters) * 100) : 0;
     
-    return { pending, started, reviewed, completed, percentage, totalChapters };
+    return { pending, started, selfStudyDone, reviewed, completed, percentage, totalChapters };
   };
 
   // Get current day of week in IST (0=Sun, 1=Mon, ..., 6=Sat)
@@ -1669,14 +1976,23 @@ const StudyTrackerApp = ({ session }) => {
   return (
     <div className="min-h-screen">
       {/* Top Navigation Bar - EduMaster style */}
-      <nav className="sticky top-0 z-40 glass-nav shadow-glass">
+      <nav className="sticky top-0 z-40 glass-nav shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             {/* Logo & Profile Switcher */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <div className="bg-gradient-to-br from-rose-400 to-purple-500 p-1.5 sm:p-2 rounded-xl shadow-lg">
+              <button
+                onClick={() => isAdminMode ? exitAdminMode() : setShowPinModal(true)}
+                className="bg-gradient-to-br from-rose-400 to-purple-500 p-1.5 sm:p-2 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 relative"
+                title={isAdminMode ? 'Exit Admin Mode' : 'Admin Mode'}
+              >
                 <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-              </div>
+                {isAdminMode && (
+                  <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-400 rounded-full flex items-center justify-center border-2 border-white">
+                    <Shield className="w-2 h-2 text-amber-800" />
+                  </div>
+                )}
+              </button>
               <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-rose-600 to-purple-600 bg-clip-text text-transparent hidden md:block">
                 Kannama
               </span>
@@ -1760,7 +2076,7 @@ const StudyTrackerApp = ({ session }) => {
 
             {/* Navigation Tabs - Scrollable on mobile */}
             <div className="flex-1 overflow-x-auto scrollbar-hide mx-2 md:mx-4">
-              <div className="flex items-center gap-1 glass-white rounded-full px-2 py-1.5 shadow-glass w-max min-w-full md:w-auto md:min-w-0 md:justify-center">
+              <div className="flex items-center gap-1 bg-white/40 rounded-full px-2 py-1.5 w-max min-w-full md:w-auto md:min-w-0 md:justify-center">
                 {[
                   { key: 'dashboard', label: 'Home', icon: Home },
                   { key: 'daily', label: 'Tasks', icon: CheckCircle },
@@ -1788,6 +2104,17 @@ const StudyTrackerApp = ({ session }) => {
 
             {/* Right side - Notifications, Profile */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              {/* Admin Mode Badge */}
+              {isAdminMode && (
+                <button
+                  onClick={exitAdminMode}
+                  className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold border border-amber-300 hover:bg-amber-200 transition-all"
+                  title="Click to exit admin mode"
+                >
+                  <Unlock className="w-3 h-3" />
+                  <span className="hidden sm:inline">Admin</span>
+                </button>
+              )}
               {/* Notifications */}
               <div className="relative">
                 <button 
@@ -3088,43 +3415,111 @@ const StudyTrackerApp = ({ session }) => {
                           )}
                         </button>
                         <div className="flex-1">
-                          <div className={`font-semibold ${task.completed ? 'line-through text-gray-500' : 'text-gray-500'}`}>
-                            {task.task_type ? (
-                              <>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold mr-2">
-                                  {task.task_type === 'Event' && '🎉'}
-                                  {task.task_type === 'Project' && '📁'}
-                                  {task.task_type === 'Reading' && '📖'}
-                                  {task.task_type === 'Chore' && '🏠'}
-                                  {task.task_type === 'Music' && '🎵'}
-                                  {task.task_type === 'Sports' && '⚽'}
-                                  {task.task_type === 'Personal' && '💡'}
-                                  {task.task_type === 'General' && '⭐'}
-                                  {task.task_type}
-                                </span>
-                                {task.activity}
-                              </>
-                            ) : (
-                              <>{task.subject} {task.activity && `- ${task.activity}`}</>
-                            )}
-                          </div>
-                          {task.chapter && (
-                            <div className="text-sm text-purple-600 font-medium">{task.chapter}</div>
-                          )}
-                          {task.carryover_days > 0 && (
-                            <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-pastel-orange-light border border-pastel-orange rounded-full shadow-soft">
-                              <span className="text-xs font-semibold text-orange-600">
-                                Carried over {task.carryover_days} {task.carryover_days === 1 ? 'day' : 'days'}
-                              </span>
+                          {isAdminMode && editingTaskName === task.id ? (
+                            <div className="space-y-2">
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={editTaskFields.subject}
+                                  onChange={(e) => setEditTaskFields({ ...editTaskFields, subject: e.target.value })}
+                                  placeholder="Subject"
+                                  className="flex-1 text-sm px-2 py-1.5 border border-amber-300 rounded-lg bg-amber-50 focus:ring-2 focus:ring-amber-400 font-semibold"
+                                />
+                                <input
+                                  type="text"
+                                  value={editTaskFields.activity}
+                                  onChange={(e) => setEditTaskFields({ ...editTaskFields, activity: e.target.value })}
+                                  placeholder="Activity"
+                                  className="flex-1 text-sm px-2 py-1.5 border border-amber-300 rounded-lg bg-amber-50 focus:ring-2 focus:ring-amber-400"
+                                />
+                              </div>
+                              <input
+                                type="text"
+                                value={editTaskFields.chapter}
+                                onChange={(e) => setEditTaskFields({ ...editTaskFields, chapter: e.target.value })}
+                                placeholder="Chapter (optional)"
+                                className="w-full text-sm px-2 py-1.5 border border-amber-300 rounded-lg bg-amber-50 focus:ring-2 focus:ring-amber-400"
+                              />
+                              <input
+                                type="text"
+                                value={editTaskFields.instructions}
+                                onChange={(e) => setEditTaskFields({ ...editTaskFields, instructions: e.target.value })}
+                                placeholder="Instructions (optional)"
+                                className="w-full text-sm px-2 py-1.5 border border-amber-300 rounded-lg bg-amber-50 focus:ring-2 focus:ring-amber-400 italic"
+                              />
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => updateTaskFields(task.id)}
+                                  className="text-xs px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-semibold transition-all"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => { setEditingTaskName(null); setEditTaskFields({ subject: '', activity: '', chapter: '', instructions: '' }); }}
+                                  className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg font-semibold transition-all"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
+                          ) : (
+                            <>
+                              <div className={`font-semibold ${task.completed ? 'line-through text-gray-500' : 'text-gray-500'}`}>
+                                {task.task_type ? (
+                                  <>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold mr-2">
+                                      {task.task_type === 'Event' && '🎉'}
+                                      {task.task_type === 'Project' && '📁'}
+                                      {task.task_type === 'Reading' && '📖'}
+                                      {task.task_type === 'Chore' && '🏠'}
+                                      {task.task_type === 'Music' && '🎵'}
+                                      {task.task_type === 'Sports' && '⚽'}
+                                      {task.task_type === 'Personal' && '💡'}
+                                      {task.task_type === 'General' && '⭐'}
+                                      {task.task_type}
+                                    </span>
+                                    {task.activity}
+                                  </>
+                                ) : (
+                                  <>{task.subject} {task.activity && `- ${task.activity}`}</>
+                                )}
+                                {isAdminMode && (
+                                  <button
+                                    onClick={() => {
+                                      setEditingTaskName(task.id);
+                                      setEditTaskFields({
+                                        subject: task.subject || '',
+                                        activity: task.activity || '',
+                                        chapter: task.chapter || '',
+                                        instructions: task.instructions || ''
+                                      });
+                                    }}
+                                    className="inline-flex ml-2 text-amber-500 hover:text-amber-700 p-0.5 hover:bg-amber-50 rounded transition-all"
+                                    title="Edit task details"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                              {task.chapter && (
+                                <div className="text-sm text-purple-600 font-medium">{task.chapter}</div>
+                              )}
+                              {task.carryover_days > 0 && (
+                                <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-pastel-orange-light border border-pastel-orange rounded-full shadow-soft">
+                                  <span className="text-xs font-semibold text-orange-600">
+                                    Carried over {task.carryover_days} {task.carryover_days === 1 ? 'day' : 'days'}
+                                  </span>
+                                </div>
+                              )}
+                              {task.instructions && (
+                                <div className="text-sm text-gray-600 mt-1 italic">{task.instructions}</div>
+                              )}
+                              <div className="flex items-center gap-2 mt-1">
+                                <Clock className="w-3 h-3 text-gray-400" />
+                                <span className="text-xs text-gray-500">{task.duration} mins</span>
+                              </div>
+                            </>
                           )}
-                          {task.instructions && (
-                            <div className="text-sm text-gray-600 mt-1 italic">{task.instructions}</div>
-                          )}
-                          <div className="flex items-center gap-2 mt-1">
-                            <Clock className="w-3 h-3 text-gray-400" />
-                            <span className="text-xs text-gray-500">{task.duration} mins</span>
-                          </div>
                         </div>
                         <button
                           onClick={() => deleteTask(task.id)}
@@ -3132,6 +3527,35 @@ const StudyTrackerApp = ({ session }) => {
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
+                        {/* Admin: Date edit */}
+                        {isAdminMode && (
+                          <div className="flex-shrink-0">
+                            {editingTaskDate === task.id ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="date"
+                                  defaultValue={task.date}
+                                  onChange={(e) => updateTaskDate(task.id, e.target.value)}
+                                  className="text-xs px-2 py-1 border border-amber-300 rounded-lg bg-amber-50 focus:ring-2 focus:ring-amber-400"
+                                />
+                                <button
+                                  onClick={() => setEditingTaskDate(null)}
+                                  className="text-gray-400 hover:text-gray-600 p-1"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setEditingTaskDate(task.id)}
+                                className="flex items-center gap-1 text-amber-600 hover:text-amber-700 p-1.5 hover:bg-amber-50 rounded-lg transition-all"
+                                title={`Move task (current: ${task.date})`}
+                              >
+                                <Calendar className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -3784,7 +4208,7 @@ const StudyTrackerApp = ({ session }) => {
 
             {/* Subject Detail Section (Inline) */}
             {viewingSubject && (
-              <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl shadow-lg overflow-hidden border-2 border-indigo-200">
+              <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl shadow-lg overflow-visible border-2 border-indigo-200">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-indigo-400 to-purple-400 p-5 text-white">
                   <div className="flex items-center justify-between">
@@ -3832,6 +4256,12 @@ const StudyTrackerApp = ({ session }) => {
                         if (trackingMode === 'smart') {
                           // Smart Tracking Mode - Simple checkbox with auto metadata
                           const normalizedChapter = normalizeChapter(chapter, 'smart');
+                          // Compute task count and study time dynamically from tasks
+                          const chapterTasks = tasks.filter(t => t.subject === viewingSubject.name && t.chapter === chapterName);
+                          const dynamicTaskCount = chapterTasks.length;
+                          const dynamicStudyTime = chapterTasks.reduce((sum, t) => sum + (parseInt(t.duration) || 0), 0);
+                          const lastTask = chapterTasks.filter(t => t.completed).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                          const dynamicLastStudied = lastTask ? lastTask.date : normalizedChapter.lastStudied;
                           return (
                             <div key={i} className="p-3 bg-white rounded-lg group hover:shadow-md transition-all">
                               <div className="flex items-center justify-between">
@@ -3859,31 +4289,38 @@ const StudyTrackerApp = ({ session }) => {
                                         <span className="text-xs text-green-600 font-semibold">✓ Done</span>
                                       )}
                                     </div>
-                                    {(normalizedChapter.lastStudied || normalizedChapter.taskCount > 0 || normalizedChapter.studyTime > 0) && (
+                                    {(dynamicLastStudied || dynamicTaskCount > 0 || dynamicStudyTime > 0) && (
                                       <div className="text-xs text-gray-500 mt-1 flex items-center gap-3">
-                                        {normalizedChapter.lastStudied && (
-                                          <span>📅 Last: {new Date(normalizedChapter.lastStudied).toLocaleDateString()}</span>
+                                        {dynamicLastStudied && (
+                                          <span>📅 Last: {new Date(dynamicLastStudied).toLocaleDateString()}</span>
                                         )}
-                                        {normalizedChapter.taskCount > 0 && (
-                                          <span>📝 {normalizedChapter.taskCount} tasks</span>
+                                        {dynamicTaskCount > 0 && (
+                                          <span>📝 {dynamicTaskCount} tasks</span>
                                         )}
-                                        {normalizedChapter.studyTime > 0 && (
-                                          <span>⏱️ {normalizedChapter.studyTime} min</span>
+                                        {dynamicStudyTime > 0 && (
+                                          <span>⏱️ {dynamicStudyTime} min</span>
                                         )}
                                       </div>
                                     )}
                                   </div>
                                 </div>
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
+                                    const deletedChapter = viewingSubject.chapters[i];
+                                    const deletedName = typeof deletedChapter === 'string' ? deletedChapter : deletedChapter.name;
+                                    const updatedChapters = viewingSubject.chapters.filter((_, idx) => idx !== i);
                                     const updated = subjects.map(s => 
                                       s.id === viewingSubject.id 
-                                        ? { ...s, chapters: s.chapters.filter((_, idx) => idx !== i) }
+                                        ? { ...s, chapters: updatedChapters }
                                         : s
                                     );
                                     setSubjects(updated);
-                                    saveData('subjects', updated);
-                                    setViewingSubject({ ...viewingSubject, chapters: viewingSubject.chapters.filter((_, idx) => idx !== i) });
+                                    setViewingSubject({ ...viewingSubject, chapters: updatedChapters });
+                                    await supabase.from('subjects').update({ chapters: updatedChapters }).eq('id', viewingSubject.id);
+                                    // Also remove from exams
+                                    if (deletedName) {
+                                      await removeChapterFromExams(viewingSubject.name, deletedName);
+                                    }
                                   }}
                                   className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-500 transition-all ml-2"
                                 >
@@ -3895,38 +4332,66 @@ const StudyTrackerApp = ({ session }) => {
                         } else {
                           // Comprehensive Tracking Mode - Full manual tracking
                           const normalizedChapter = normalizeChapter(chapter, 'comprehensive');
+                          // Compute task count and study time dynamically from tasks
+                          const chapterTasks = tasks.filter(t => t.subject === viewingSubject.name && t.chapter === chapterName);
+                          const dynamicTaskCount = chapterTasks.length;
+                          const dynamicStudyTime = chapterTasks.reduce((sum, t) => sum + (parseInt(t.duration) || 0), 0);
+                          const lastCompletedTask = chapterTasks.filter(t => t.completed).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                          const dynamicLastStudied = lastCompletedTask ? lastCompletedTask.date : normalizedChapter.lastStudied;
                           const statusColor = {
                             pending: 'bg-gray-100 text-gray-600 border-gray-300',
                             started: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+                            self_study_done: 'bg-teal-100 text-teal-700 border-teal-300',
+                            reviewed: 'bg-blue-100 text-blue-700 border-blue-300',
                             completed: 'bg-green-100 text-green-700 border-green-300'
                           }[normalizedChapter.status];
                           
                           return (
                             <div key={i} className={`p-3 bg-white rounded-lg border-2 group hover:shadow-md transition-all ${statusColor}`}>
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2 flex-1">
-                                  <span className="font-semibold text-gray-800">{i + 1}. {chapterName}</span>
+                              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="font-semibold text-gray-800 truncate">{i + 1}. {chapterName}</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <select
-                                    value={normalizedChapter.status}
-                                    onChange={(e) => updateSubjectChapterStatus(viewingSubject.id, i, e.target.value)}
-                                    className="text-xs px-2 py-1 rounded-lg border-2 font-semibold focus:ring-2 focus:ring-indigo-400 bg-white"
-                                  >
-                                    <option value="pending">📋 Pending</option>
-                                    <option value="started">📖 Started</option>
-                                    <option value="completed">✅ Completed</option>
-                                  </select>
+                                <div className="flex items-center gap-2 flex-shrink-0">
                                   <button
                                     onClick={() => {
+                                      const statuses = ['pending', 'started', 'self_study_done', 'reviewed', 'completed'];
+                                      const currentIndex = statuses.indexOf(normalizedChapter.status);
+                                      const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+                                      updateSubjectChapterStatus(viewingSubject.id, i, nextStatus);
+                                    }}
+                                    className={`text-xs px-3 py-1.5 rounded-lg border-2 font-semibold cursor-pointer hover:opacity-80 transition-all ${
+                                      normalizedChapter.status === 'completed' ? 'bg-green-100 text-green-700 border-green-300' :
+                                      normalizedChapter.status === 'reviewed' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                      normalizedChapter.status === 'self_study_done' ? 'bg-teal-100 text-teal-700 border-teal-300' :
+                                      normalizedChapter.status === 'started' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                                      'bg-gray-100 text-gray-600 border-gray-300'
+                                    }`}
+                                    title="Click to cycle: Pending → Started → Self Study Done → Reviewed → Completed"
+                                  >
+                                    {normalizedChapter.status === 'completed' ? '✅ Completed' :
+                                     normalizedChapter.status === 'reviewed' ? '🔍 Reviewed' :
+                                     normalizedChapter.status === 'self_study_done' ? '📝 Self Study Done' :
+                                     normalizedChapter.status === 'started' ? '📖 Started' :
+                                     '📋 Pending'}
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      const deletedChapter = viewingSubject.chapters[i];
+                                      const deletedName = typeof deletedChapter === 'string' ? deletedChapter : deletedChapter.name;
+                                      const updatedChapters = viewingSubject.chapters.filter((_, idx) => idx !== i);
                                       const updated = subjects.map(s => 
                                         s.id === viewingSubject.id 
-                                          ? { ...s, chapters: s.chapters.filter((_, idx) => idx !== i) }
+                                          ? { ...s, chapters: updatedChapters }
                                           : s
                                       );
                                       setSubjects(updated);
-                                      saveData('subjects', updated);
-                                      setViewingSubject({ ...viewingSubject, chapters: viewingSubject.chapters.filter((_, idx) => idx !== i) });
+                                      setViewingSubject({ ...viewingSubject, chapters: updatedChapters });
+                                      await supabase.from('subjects').update({ chapters: updatedChapters }).eq('id', viewingSubject.id);
+                                      // Also remove from exams
+                                      if (deletedName) {
+                                        await removeChapterFromExams(viewingSubject.name, deletedName);
+                                      }
                                     }}
                                     className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-500 transition-all"
                                   >
@@ -3936,14 +4401,14 @@ const StudyTrackerApp = ({ session }) => {
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div className="bg-white/50 px-2 py-1 rounded">
-                                  📝 <strong>{normalizedChapter.taskCount}</strong> tasks
+                                  📝 <strong>{dynamicTaskCount}</strong> tasks
                                 </div>
                                 <div className="bg-white/50 px-2 py-1 rounded">
-                                  ⏱️ <strong>{normalizedChapter.studyTime}</strong> min
+                                  ⏱️ <strong>{dynamicStudyTime}</strong> min
                                 </div>
-                                {normalizedChapter.lastStudied && (
+                                {dynamicLastStudied && (
                                   <div className="bg-white/50 px-2 py-1 rounded col-span-2">
-                                    📅 Last: <strong>{new Date(normalizedChapter.lastStudied).toLocaleDateString()}</strong>
+                                    📅 Last: <strong>{new Date(dynamicLastStudied).toLocaleDateString()}</strong>
                                   </div>
                                 )}
                                 <div className="bg-white/50 px-2 py-1 rounded">
@@ -4297,11 +4762,15 @@ const StudyTrackerApp = ({ session }) => {
                     {!showAddExam && selectedExamData ? (
                       selectedExamData.subjects && selectedExamData.subjects.length > 0 ? (
                         <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                          {selectedExamData.subjects.map((subject, subjectIdx) => {
+                          {selectedExamData.subjects
+                            .map((subject, originalIdx) => ({ subject, originalIdx }))
+                            .sort((a, b) => new Date(a.subject.date) - new Date(b.subject.date))
+                            .map(({ subject, originalIdx }) => {
                             const daysLeft = getDaysUntil(subject.date);
                             const subjectProgress = {
                               completed: subject.chapters?.filter(c => c.status === 'completed').length || 0,
                               reviewed: subject.chapters?.filter(c => c.status === 'reviewed').length || 0,
+                              selfStudyDone: subject.chapters?.filter(c => c.status === 'self_study_done').length || 0,
                               started: subject.chapters?.filter(c => c.status === 'started').length || 0,
                               pending: subject.chapters?.filter(c => c.status === 'pending').length || 0,
                               total: subject.chapters?.length || 0
@@ -4309,12 +4778,12 @@ const StudyTrackerApp = ({ session }) => {
                             subjectProgress.percentage = subjectProgress.total > 0 
                               ? Math.round((subjectProgress.completed / subjectProgress.total) * 100) 
                               : 0;
-                            const isSelected = selectedSubjectIndex === subjectIdx;
+                            const isSelected = selectedSubjectIndex === originalIdx;
                             
                             return (
                               <button
-                                key={subjectIdx}
-                                onClick={() => setSelectedSubjectIndex(subjectIdx)}
+                                key={originalIdx}
+                                onClick={() => setSelectedSubjectIndex(originalIdx)}
                                 className={`w-full text-left p-3 rounded-lg transition-all cursor-pointer ${
                                   isSelected 
                                     ? 'bg-indigo-100 border-2 border-indigo-500 shadow-md' 
@@ -4436,10 +4905,12 @@ const StudyTrackerApp = ({ session }) => {
                             <select
                               onChange={(e) => {
                                 if (e.target.value) {
+                                  const chName = e.target.value;
                                   setNewExamSubject({
                                     ...newExamSubject,
-                                    chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                    chapters: [...newExamSubject.chapters, { name: chName, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '', examOnly: false }]
                                   });
+                                  syncChapterToSubject(newExamSubject.subject, chName);
                                   e.target.value = '';
                                 }
                               }}
@@ -4462,10 +4933,12 @@ const StudyTrackerApp = ({ session }) => {
                             onChange={(e) => setExamChapterInput(e.target.value)}
                             onKeyPress={(e) => {
                               if (e.key === 'Enter' && examChapterInput.trim()) {
+                                const isExamOnly = examChapterExamOnly;
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput.trim(), status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '', examOnly: isExamOnly }]
                                 });
+                                if (!isExamOnly) syncChapterToSubject(newExamSubject.subject, examChapterInput.trim());
                                 setExamChapterInput('');
                               }
                             }}
@@ -4474,10 +4947,12 @@ const StudyTrackerApp = ({ session }) => {
                           <button
                             onClick={() => {
                               if (examChapterInput.trim()) {
+                                const isExamOnly = examChapterExamOnly;
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput.trim(), status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '', examOnly: isExamOnly }]
                                 });
+                                if (!isExamOnly) syncChapterToSubject(newExamSubject.subject, examChapterInput.trim());
                                 setExamChapterInput('');
                               }
                             }}
@@ -4486,11 +4961,20 @@ const StudyTrackerApp = ({ session }) => {
                             Add
                           </button>
                         </div>
+                        <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={examChapterExamOnly}
+                            onChange={(e) => setExamChapterExamOnly(e.target.checked)}
+                            className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                          />
+                          <span className="text-xs text-gray-600">📌 Exam only <span className="text-gray-400">(won't add to subject)</span></span>
+                        </label>
                         {newExamSubject.chapters.length > 0 && (
                           <div className="space-y-1">
                             {newExamSubject.chapters.map((ch, idx) => (
                               <div key={idx} className="flex items-center justify-between p-1 bg-gray-50 rounded text-sm">
-                                <span>{ch.name}</span>
+                                <span>{ch.examOnly ? '📌 ' : ''}{ch.name}</span>
                                 <button
                                   onClick={() => {
                                     setNewExamSubject({
@@ -4584,6 +5068,7 @@ const StudyTrackerApp = ({ session }) => {
                         const subjectProgress = {
                           completed: selectedSubjectData.chapters?.filter(c => c.status === 'completed').length || 0,
                           reviewed: selectedSubjectData.chapters?.filter(c => c.status === 'reviewed').length || 0,
+                          selfStudyDone: selectedSubjectData.chapters?.filter(c => c.status === 'self_study_done').length || 0,
                           started: selectedSubjectData.chapters?.filter(c => c.status === 'started').length || 0,
                           pending: selectedSubjectData.chapters?.filter(c => c.status === 'pending').length || 0,
                           total: selectedSubjectData.chapters?.length || 0
@@ -4741,6 +5226,9 @@ const StudyTrackerApp = ({ session }) => {
                                   <span className="text-blue-600 flex items-center gap-1 font-medium">
                                     <BookOpen className="w-4 h-4" /> {subjectProgress.reviewed || 0} Reviewed
                                   </span>
+                                  <span className="text-teal-600 flex items-center gap-1 font-medium">
+                                    <BookOpen className="w-4 h-4" /> {subjectProgress.selfStudyDone || 0} Self Study Done
+                                  </span>
                                   <span className="text-yellow-600 flex items-center gap-1 font-medium">
                                     <Zap className="w-4 h-4" /> {subjectProgress.started} Started
                                   </span>
@@ -4761,8 +5249,11 @@ const StudyTrackerApp = ({ session }) => {
                                     const revisionsCompleted = chapter.revisionsCompleted ?? 0;
                                     
                                     return (
-                                      <div key={chapterIdx} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-indigo-300 transition-all">
-                                        <div className="flex-1 text-base font-medium text-gray-900">{chapter.name}</div>
+                                      <div key={chapterIdx} className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all ${chapter.examOnly ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200 hover:border-indigo-300'}`}>
+                                        <div className="flex-1 text-base font-medium text-gray-900">
+                                          {chapter.examOnly && <span className="text-orange-500 mr-1" title="Exam only - not in subject chapters">📌</span>}
+                                          {chapter.name}
+                                        </div>
                                         
                                         {/* Revision Counter */}
                                         {revisionsNeeded > 0 && (
@@ -4819,12 +5310,14 @@ const StudyTrackerApp = ({ session }) => {
                                               className={`text-sm px-3 py-1.5 rounded-lg font-medium border-2 ${
                                                 chapter.status === 'completed' ? 'bg-green-100 text-green-700 border-green-300' :
                                                 chapter.status === 'reviewed' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                                chapter.status === 'self_study_done' ? 'bg-teal-100 text-teal-700 border-teal-300' :
                                                 chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
                                                 'bg-gray-100 text-gray-600 border-gray-300'
                                               }`}
                                             >
                                               <option value="pending">Pending</option>
                                               <option value="started">Started</option>
+                                              <option value="self_study_done">Self Study Done</option>
                                               <option value="reviewed">Reviewed</option>
                                               <option value="completed">Completed</option>
                                             </select>
@@ -4847,6 +5340,35 @@ const StudyTrackerApp = ({ session }) => {
                                               />
                                             )}
                                             <button
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                const newExamOnly = !chapter.examOnly;
+                                                const subjectName = selectedSubjectData.subject;
+                                                const chapterName = chapter.name;
+                                                
+                                                const updatedSubjects = [...selectedExamData.subjects];
+                                                const updatedChapters = [...updatedSubjects[selectedSubjectIndex].chapters];
+                                                updatedChapters[chapterIdx] = { ...updatedChapters[chapterIdx], examOnly: newExamOnly };
+                                                updatedSubjects[selectedSubjectIndex] = { ...updatedSubjects[selectedSubjectIndex], chapters: updatedChapters };
+                                                await updateExam(selectedExamData.id, { subjects: updatedSubjects });
+                                                
+                                                // Sync: if marking exam-only, remove from subject; if unmarking, add to subject
+                                                if (newExamOnly) {
+                                                  await removeChapterFromSubject(subjectName, chapterName);
+                                                } else {
+                                                  await syncChapterToSubject(subjectName, chapterName);
+                                                }
+                                              }}
+                                              className={`text-sm px-2 py-1.5 rounded-lg font-medium border-2 transition-all ${
+                                                chapter.examOnly 
+                                                  ? 'bg-orange-100 text-orange-700 border-orange-300' 
+                                                  : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-orange-300'
+                                              }`}
+                                              title={chapter.examOnly ? 'Exam only (click to sync to subject)' : 'Synced to subject (click to make exam only)'}
+                                            >
+                                              📌
+                                            </button>
+                                            <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 deleteChapterFromExamSubject(selectedExamData.id, selectedSubjectIndex, chapterIdx);
@@ -4861,7 +5383,7 @@ const StudyTrackerApp = ({ session }) => {
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                const statuses = ['pending', 'started', 'reviewed', 'completed'];
+                                                const statuses = ['pending', 'started', 'self_study_done', 'reviewed', 'completed'];
                                                 const currentIndex = statuses.indexOf(chapter.status);
                                                 const nextStatus = statuses[(currentIndex + 1) % statuses.length];
                                                 updateChapterStatus(selectedExamData.id, selectedSubjectIndex, chapterIdx, nextStatus);
@@ -4869,6 +5391,7 @@ const StudyTrackerApp = ({ session }) => {
                                               className={`text-sm px-3 py-1.5 rounded-lg font-medium cursor-pointer hover:opacity-80 transition-all ${
                                                 chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
                                                 chapter.status === 'reviewed' ? 'bg-blue-100 text-blue-700' :
+                                                chapter.status === 'self_study_done' ? 'bg-teal-100 text-teal-700' :
                                                 chapter.status === 'started' ? 'bg-yellow-100 text-yellow-700' :
                                                 'bg-gray-100 text-gray-600'
                                               }`}
@@ -4911,7 +5434,7 @@ const StudyTrackerApp = ({ session }) => {
                                       <select
                                         onChange={(e) => {
                                           if (e.target.value) {
-                                            addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, e.target.value);
+                                            addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, e.target.value, false);
                                             e.target.value = '';
                                           }
                                         }}
@@ -4935,7 +5458,7 @@ const StudyTrackerApp = ({ session }) => {
                                       placeholder="Chapter name..."
                                       onKeyPress={(e) => {
                                         if (e.key === 'Enter' && e.target.value.trim()) {
-                                          addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, e.target.value.trim());
+                                          addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, e.target.value.trim(), examChapterExamOnly);
                                           e.target.value = '';
                                         }
                                       }}
@@ -4945,7 +5468,7 @@ const StudyTrackerApp = ({ session }) => {
                                       onClick={(e) => {
                                         const input = e.target.previousSibling;
                                         if (input.value.trim()) {
-                                          addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, input.value.trim());
+                                          addChapterToExamSubject(selectedExamData.id, selectedSubjectIndex, input.value.trim(), examChapterExamOnly);
                                           input.value = '';
                                         }
                                       }}
@@ -4954,6 +5477,15 @@ const StudyTrackerApp = ({ session }) => {
                                       Add
                                     </button>
                                   </div>
+                                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={examChapterExamOnly}
+                                      onChange={(e) => setExamChapterExamOnly(e.target.checked)}
+                                      className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                                    />
+                                    <span className="text-xs text-gray-600">📌 Exam only <span className="text-gray-400">(won't add to subject chapters)</span></span>
+                                  </label>
                                 </div>
                               </div>
                             )}
@@ -5033,10 +5565,12 @@ const StudyTrackerApp = ({ session }) => {
                               <select
                                 onChange={(e) => {
                                   if (e.target.value) {
+                                    const chName = e.target.value;
                                     setNewExamSubject({
                                       ...newExamSubject,
-                                      chapters: [...newExamSubject.chapters, { name: e.target.value, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                      chapters: [...newExamSubject.chapters, { name: chName, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '', examOnly: false }]
                                     });
+                                    syncChapterToSubject(newExamSubject.subject, chName);
                                     e.target.value = '';
                                   }
                                 }}
@@ -5060,10 +5594,12 @@ const StudyTrackerApp = ({ session }) => {
                             onChange={(e) => setExamChapterInput(e.target.value)}
                             onKeyPress={(e) => {
                               if (e.key === 'Enter' && examChapterInput.trim()) {
+                                const isExamOnly = examChapterExamOnly;
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput.trim(), status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '', examOnly: isExamOnly }]
                                 });
+                                if (!isExamOnly) syncChapterToSubject(newExamSubject.subject, examChapterInput.trim());
                                 setExamChapterInput('');
                               }
                             }}
@@ -5072,10 +5608,12 @@ const StudyTrackerApp = ({ session }) => {
                           <button
                             onClick={() => {
                               if (examChapterInput.trim()) {
+                                const isExamOnly = examChapterExamOnly;
                                 setNewExamSubject({
                                   ...newExamSubject,
-                                  chapters: [...newExamSubject.chapters, { name: examChapterInput, status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '' }]
+                                  chapters: [...newExamSubject.chapters, { name: examChapterInput.trim(), status: 'pending', revisionsNeeded: 0, revisionsCompleted: 0, studyMode: 'Full Portions', customStudyMode: '', examOnly: isExamOnly }]
                                 });
+                                if (!isExamOnly) syncChapterToSubject(newExamSubject.subject, examChapterInput.trim());
                                 setExamChapterInput('');
                               }
                             }}
@@ -5084,13 +5622,22 @@ const StudyTrackerApp = ({ session }) => {
                             Add
                           </button>
                         </div>
+                        <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={examChapterExamOnly}
+                            onChange={(e) => setExamChapterExamOnly(e.target.checked)}
+                            className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                          />
+                          <span className="text-xs text-gray-600">📌 Exam only <span className="text-gray-400">(won't add to subject)</span></span>
+                        </label>
                         
                         {/* Display added chapters */}
                         {newExamSubject.chapters.length > 0 && (
                           <div className="space-y-1 mb-2">
                             {newExamSubject.chapters.map((ch, idx) => (
                               <div key={idx} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                <span className="text-gray-700">{ch.name}</span>
+                                <span className="text-gray-700">{ch.examOnly ? '📌 ' : ''}{ch.name}</span>
                                 <button
                                   onClick={() => {
                                     setNewExamSubject({
@@ -5227,42 +5774,49 @@ const StudyTrackerApp = ({ session }) => {
                             {/* Subjects Table */}
                             <div className="space-y-1">
                               {exam.subjects && exam.subjects.map((subject, subjectIdx) => (
-                                <div key={subjectIdx} className="flex items-center gap-2 bg-white rounded px-2 py-1.5 border border-gray-100">
-                                  <span className="text-xs font-medium text-gray-700 flex-1 truncate">{subject.subject}</span>
-                                  <input
-                                    type="text"
-                                    value={subject.marksInput ?? ''}
-                                    onChange={(e) => {
-                                      const input = e.target.value.trim();
-                                      let percentage = null;
-                                      if (input) {
-                                        if (input.includes('/') || input.includes('\\')) {
-                                          const parts = input.replace(/\\/g, '/').split('/');
-                                          if (parts.length === 2) {
-                                            const num = parseFloat(parts[0]), den = parseFloat(parts[1]);
-                                            if (!isNaN(num) && !isNaN(den) && den > 0) percentage = Math.round((num / den) * 1000) / 10;
+                                <div key={subjectIdx} className="bg-white rounded px-2 py-1.5 border border-gray-100">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-medium text-gray-700 flex-1 truncate">{subject.subject}</span>
+                                    <input
+                                      type="text"
+                                      value={subject.marksInput ?? ''}
+                                      onChange={(e) => {
+                                        const input = e.target.value.trim();
+                                        let percentage = null;
+                                        if (input) {
+                                          if (input.includes('/') || input.includes('\\')) {
+                                            const parts = input.replace(/\\/g, '/').split('/');
+                                            if (parts.length === 2) {
+                                              const num = parseFloat(parts[0]), den = parseFloat(parts[1]);
+                                              if (!isNaN(num) && !isNaN(den) && den > 0) percentage = Math.round((num / den) * 1000) / 10;
+                                            }
+                                          } else {
+                                            const num = parseFloat(input);
+                                            if (!isNaN(num) && num >= 0 && num <= 100) percentage = num;
                                           }
-                                        } else {
-                                          const num = parseFloat(input);
-                                          if (!isNaN(num) && num >= 0 && num <= 100) percentage = num;
                                         }
-                                      }
-                                      const updatedSubjects = [...exam.subjects];
-                                      updatedSubjects[subjectIdx] = { ...subject, marksInput: input, marks: percentage };
-                                      updateExam(exam.id, { subjects: updatedSubjects });
-                                    }}
-                                    placeholder="marks"
-                                    className="w-16 px-1.5 py-0.5 text-xs border border-gray-200 rounded text-center focus:ring-1 focus:ring-blue-400"
-                                  />
-                                  {subject.marks != null && (
-                                    <span className={`text-xs font-semibold min-w-[40px] text-center ${
-                                      subject.marks >= 90 ? 'text-green-600' :
-                                      subject.marks >= 75 ? 'text-blue-600' :
-                                      subject.marks >= 60 ? 'text-yellow-600' :
-                                      'text-gray-500'
-                                    }`}>
-                                      {subject.marks}%
-                                    </span>
+                                        const updatedSubjects = [...exam.subjects];
+                                        updatedSubjects[subjectIdx] = { ...subject, marksInput: input, marks: percentage };
+                                        updateExam(exam.id, { subjects: updatedSubjects });
+                                      }}
+                                      placeholder="marks"
+                                      className="w-16 px-1.5 py-0.5 text-xs border border-gray-200 rounded text-center focus:ring-1 focus:ring-blue-400"
+                                    />
+                                    {subject.marks != null && (
+                                      <span className={`text-xs font-semibold min-w-[40px] text-center ${
+                                        subject.marks >= 90 ? 'text-green-600' :
+                                        subject.marks >= 75 ? 'text-blue-600' :
+                                        subject.marks >= 60 ? 'text-yellow-600' :
+                                        'text-gray-500'
+                                      }`}>
+                                        {subject.marks}%
+                                      </span>
+                                    )}
+                                  </div>
+                                  {subject.keyPoints && (
+                                    <div className="mt-1 text-xs text-gray-500 italic truncate" title={subject.keyPoints}>
+                                      📝 {subject.keyPoints}
+                                    </div>
                                   )}
                                 </div>
                               ))}
@@ -5898,17 +6452,49 @@ const StudyTrackerApp = ({ session }) => {
                       })}
                       {isToday && <span className="text-sm bg-indigo-600 text-white px-3 py-1 rounded-full">Today</span>}
                     </h3>
-                    <button
-                      onClick={() => setSelectedDate(null)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-all"
-                      title="Close"
-                    >
-                      <X className="w-5 h-5 text-gray-600" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setNewReminder({ title: '', date: selectedDate, description: '' });
+                          setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [selectedDateObj.getDay()] });
+                          setCalendarReminderType('one-time');
+                          setShowCalendarAddReminder(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-semibold text-sm transition-all shadow-sm"
+                        title="Add reminder for this day"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <Bell className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setSelectedDate(null)}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                        title="Close"
+                      >
+                        <X className="w-5 h-5 text-gray-600" />
+                      </button>
+                    </div>
                   </div>
                   
                   {!hasEvents ? (
-                    <p className="text-gray-500 text-center py-8 italic">No events on this day</p>
+                    <div className="text-center py-8">
+                      <p className="text-gray-500 italic mb-4">No events on this day</p>
+                      {!showCalendarAddReminder && (
+                        <button
+                          onClick={() => {
+                            setNewReminder({ title: '', date: selectedDate, description: '' });
+                            setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [selectedDateObj.getDay()] });
+                            setCalendarReminderType('one-time');
+                            setShowCalendarAddReminder(true);
+                          }}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-semibold transition-all shadow-sm"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <Bell className="w-4 h-4" />
+                          Add a Reminder
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-4">
                       {/* Exams Section */}
@@ -5963,12 +6549,32 @@ const StudyTrackerApp = ({ session }) => {
                                 key={reminder.id}
                                 className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-xl"
                               >
-                                <div className="font-semibold text-gray-500 text-lg">{reminder.title}</div>
-                                {reminder.description && (
-                                  <div className="mt-2 text-sm text-gray-500 whitespace-pre-wrap">
-                                    {reminder.description}
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-semibold text-gray-500 text-lg">{reminder.title}</div>
+                                    {reminder.description && (
+                                      <div className="mt-2 text-sm text-gray-500 whitespace-pre-wrap">
+                                        {reminder.description}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <button
+                                      onClick={() => startEditReminder(reminder)}
+                                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                      title="Edit"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteReminder(reminder.id)}
+                                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -5987,20 +6593,312 @@ const StudyTrackerApp = ({ session }) => {
                                 key={reminder.id}
                                 className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl"
                               >
-                                <div className="font-semibold text-gray-500 text-lg">{reminder.title}</div>
-                                <div className="text-gray-500 font-semibold mt-1">
-                                  <Clock className="w-4 h-4 inline mr-1" />{convertTo12Hour(reminder.time)} - {convertTo12Hour(reminder.end_time)}
-                                </div>
-                                {reminder.description && (
-                                  <div className="mt-2 text-sm text-gray-500 whitespace-pre-wrap">
-                                    {reminder.description}
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-semibold text-gray-500 text-lg">{reminder.title}</div>
+                                    <div className="text-gray-500 font-semibold mt-1">
+                                      <Clock className="w-4 h-4 inline mr-1" />{convertTo12Hour(reminder.time)} - {convertTo12Hour(reminder.end_time)}
+                                    </div>
+                                    {reminder.description && (
+                                      <div className="mt-2 text-sm text-gray-500 whitespace-pre-wrap">
+                                        {reminder.description}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <button
+                                      onClick={() => startEditRecurringReminder(reminder)}
+                                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                      title="Edit"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteRecurringReminder(reminder.id)}
+                                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Inline Edit One-Time Reminder (Calendar) */}
+                  {editingReminder && (
+                    <div className="mt-4 p-5 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-2xl border-2 border-amber-300 space-y-4 shadow-md">
+                      <h4 className="font-semibold text-gray-700 text-lg">✏️ Edit Reminder</h4>
+                      <input
+                        type="text"
+                        placeholder="Reminder title"
+                        value={editReminderData.title}
+                        onChange={(e) => setEditReminderData({ ...editReminderData, title: e.target.value })}
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent font-medium shadow-sm"
+                      />
+                      <input
+                        type="date"
+                        value={editReminderData.date}
+                        onChange={(e) => setEditReminderData({ ...editReminderData, date: e.target.value })}
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+                      />
+                      <textarea
+                        placeholder="Description (optional)"
+                        value={editReminderData.description}
+                        onChange={(e) => setEditReminderData({ ...editReminderData, description: e.target.value })}
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+                        rows="2"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={updateReminder}
+                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-semibold shadow-md transition-all"
+                        >
+                          💾 Save Changes
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingReminder(null);
+                            setEditReminderData({ title: '', date: '', description: '' });
+                          }}
+                          className="px-6 bg-gray-100 text-gray-500 py-3 rounded-xl hover:bg-gray-200 font-semibold transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Inline Edit Recurring Reminder (Calendar) */}
+                  {editingRecurringReminder && (
+                    <div className="mt-4 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-300 space-y-4 shadow-md">
+                      <h4 className="font-semibold text-gray-700 text-lg">✏️ Edit Recurring Reminder</h4>
+                      <input
+                        type="text"
+                        placeholder="Reminder title"
+                        value={newRecurringReminder.title}
+                        onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, title: e.target.value })}
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent font-medium shadow-sm"
+                      />
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <label className="text-sm text-gray-500 font-semibold block mb-2">🕐 Start Time</label>
+                          <input
+                            type="time"
+                            value={newRecurringReminder.time}
+                            onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, time: e.target.value })}
+                            className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent shadow-sm"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-sm text-gray-500 font-semibold block mb-2">🕐 End Time</label>
+                          <input
+                            type="time"
+                            value={newRecurringReminder.end_time}
+                            onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, end_time: e.target.value })}
+                            className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent shadow-sm"
+                          />
+                        </div>
+                      </div>
+                      <textarea
+                        placeholder="Description (optional)"
+                        value={newRecurringReminder.description}
+                        onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, description: e.target.value })}
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent shadow-sm"
+                        rows="2"
+                      />
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-500">📅 Select Days:</label>
+                        <div className="flex flex-wrap gap-2">
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                const newDays = newRecurringReminder.days.includes(idx)
+                                  ? newRecurringReminder.days.filter(d => d !== idx)
+                                  : [...newRecurringReminder.days, idx];
+                                setNewRecurringReminder({ ...newRecurringReminder, days: newDays });
+                              }}
+                              className={`px-4 py-2 rounded-xl font-semibold transition-all shadow-sm ${
+                                newRecurringReminder.days.includes(idx)
+                                  ? 'bg-blue-500 text-white scale-105 shadow-md'
+                                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={updateRecurringReminder}
+                          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-semibold shadow-md transition-all"
+                        >
+                          💾 Save Changes
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingRecurringReminder(null);
+                            setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
+                          }}
+                          className="px-6 bg-gray-100 text-gray-500 py-3 rounded-xl hover:bg-gray-200 font-semibold transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Calendar Add Reminder Form */}
+                  {showCalendarAddReminder && (
+                    <div className="mt-4 p-5 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-2xl border-2 border-amber-200 space-y-4 shadow-md">
+                      <h4 className="font-semibold text-gray-700 text-lg flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-amber-600" /> Add Reminder
+                      </h4>
+                      
+                      {/* Reminder Type Selector */}
+                      <div className="flex gap-2 p-1 bg-white rounded-xl border border-gray-200 shadow-sm">
+                        <button
+                          onClick={() => setCalendarReminderType('one-time')}
+                          className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
+                            calendarReminderType === 'one-time'
+                              ? 'bg-amber-500 text-white shadow-sm'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          📅 One-Time
+                        </button>
+                        <button
+                          onClick={() => setCalendarReminderType('recurring')}
+                          className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
+                            calendarReminderType === 'recurring'
+                              ? 'bg-blue-500 text-white shadow-sm'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          🔁 Recurring
+                        </button>
+                      </div>
+
+                      <input
+                        type="text"
+                        placeholder={calendarReminderType === 'one-time' ? 'Reminder title' : 'Reminder title (e.g., Tuition, Sports class)'}
+                        value={calendarReminderType === 'one-time' ? newReminder.title : newRecurringReminder.title}
+                        onChange={(e) => {
+                          if (calendarReminderType === 'one-time') {
+                            setNewReminder({ ...newReminder, title: e.target.value });
+                          } else {
+                            setNewRecurringReminder({ ...newRecurringReminder, title: e.target.value });
+                          }
+                        }}
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent font-medium shadow-sm"
+                        autoFocus
+                      />
+
+                      {calendarReminderType === 'one-time' ? (
+                        <input
+                          type="date"
+                          value={newReminder.date}
+                          onChange={(e) => setNewReminder({ ...newReminder, date: e.target.value })}
+                          className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+                        />
+                      ) : (
+                        <>
+                          <div className="flex gap-3">
+                            <div className="flex-1">
+                              <label className="text-sm text-gray-500 font-semibold block mb-2">🕐 Start Time</label>
+                              <input
+                                type="time"
+                                value={newRecurringReminder.time}
+                                onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, time: e.target.value })}
+                                className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent shadow-sm"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-sm text-gray-500 font-semibold block mb-2">🕐 End Time</label>
+                              <input
+                                type="time"
+                                value={newRecurringReminder.end_time}
+                                onChange={(e) => setNewRecurringReminder({ ...newRecurringReminder, end_time: e.target.value })}
+                                className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent shadow-sm"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-semibold text-gray-500">📅 Select Days:</label>
+                            <div className="flex flex-wrap gap-2">
+                              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => {
+                                    const newDays = newRecurringReminder.days.includes(idx)
+                                      ? newRecurringReminder.days.filter(d => d !== idx)
+                                      : [...newRecurringReminder.days, idx];
+                                    setNewRecurringReminder({ ...newRecurringReminder, days: newDays });
+                                  }}
+                                  className={`px-4 py-2 rounded-xl font-semibold transition-all shadow-sm ${
+                                    newRecurringReminder.days.includes(idx)
+                                      ? 'bg-blue-500 text-white scale-105 shadow-md'
+                                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {day}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      <textarea
+                        placeholder="Description (optional)"
+                        value={calendarReminderType === 'one-time' ? newReminder.description : newRecurringReminder.description}
+                        onChange={(e) => {
+                          if (calendarReminderType === 'one-time') {
+                            setNewReminder({ ...newReminder, description: e.target.value });
+                          } else {
+                            setNewRecurringReminder({ ...newRecurringReminder, description: e.target.value });
+                          }
+                        }}
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+                        rows="2"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            if (calendarReminderType === 'one-time') {
+                              await addReminder();
+                            } else {
+                              await addRecurringReminder();
+                            }
+                            setShowCalendarAddReminder(false);
+                          }}
+                          className={`flex-1 text-white py-3 rounded-xl font-semibold shadow-md transition-all ${
+                            calendarReminderType === 'one-time'
+                              ? 'bg-amber-500 hover:bg-amber-600'
+                              : 'bg-blue-500 hover:bg-blue-600'
+                          }`}
+                        >
+                          {calendarReminderType === 'one-time' ? '➕ Add Reminder' : '➕ Add Recurring Reminder'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowCalendarAddReminder(false);
+                            setNewReminder({ title: '', date: '', description: '' });
+                            setNewRecurringReminder({ title: '', description: '', time: '19:15', end_time: '20:00', days: [] });
+                            setCalendarReminderType('one-time');
+                          }}
+                          className="px-6 bg-gray-100 text-gray-500 py-3 rounded-xl hover:bg-gray-200 font-semibold transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -6023,6 +6921,48 @@ const StudyTrackerApp = ({ session }) => {
         )}
         </div>
       </div>
+
+      {/* PIN Modal */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => { setShowPinModal(false); setPinInput(''); setPinError(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-80 max-w-[90vw]"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex flex-col items-center mb-6">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-3">
+                <Lock className="w-8 h-8 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800">Admin Access</h3>
+              <p className="text-sm text-gray-500 mt-1">Enter PIN to continue</p>
+            </div>
+            <input
+              type="password"
+              maxLength={4}
+              value={pinInput}
+              onChange={e => { setPinInput(e.target.value.replace(/\D/g, '')); setPinError(false); }}
+              onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
+              placeholder="••••"
+              autoFocus
+              className={`w-full text-center text-3xl tracking-[0.5em] border-2 rounded-xl py-3 mb-4 outline-none transition-colors ${
+                pinError ? 'border-red-400 bg-red-50' : 'border-gray-200 focus:border-amber-400'
+              }`}
+            />
+            {pinError && (
+              <p className="text-red-500 text-sm text-center mb-3">Incorrect PIN. Try again.</p>
+            )}
+            <button
+              onClick={handlePinSubmit}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 rounded-xl transition-colors">
+              Unlock
+            </button>
+            <button
+              onClick={() => { setShowPinModal(false); setPinInput(''); setPinError(false); }}
+              className="w-full mt-2 text-gray-400 hover:text-gray-600 text-sm py-2 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -61,16 +61,16 @@ DEFAULT 'smart'
 
 | Feature | Description |
 |---------|-------------|
-| Status | Manual: pending/started/completed |
-| Study Time | Manual entry (minutes) |
-| Tasks Count | Manual entry |
+| Status | 5-status flow: pending → started → self_study_done → reviewed → completed |
+| Study Time | Dynamically computed from tasks (sum of task durations) |
+| Tasks Count | Dynamically computed from tasks (count matching subject + chapter) |
+| Last Studied | Dynamically computed from most recent completed task |
 | Revisions Needed | Manual entry |
 | Revisions Completed | Manual entry |
-| Last Studied | Manual date selection |
 
 **Advantages:**
-- Full control over all metrics
-- Detailed planning capabilities
+- Full control over status progression
+- Dynamic stats linked to actual task data
 - Better for exam preparation
 
 ---
@@ -116,12 +116,25 @@ Appears when:
 - Activity indicator (green/yellow/gray)
 
 ### Chapter List (Comprehensive Mode)
-- Status dropdown (pending/started/completed)
-- Editable study time input
-- Editable tasks count
+- **Click-to-cycle status button** (replaces dropdown):
+  - Click advances: Pending → Started → Self Study Done → Reviewed → Completed → Pending
+  - Color-coded by status (see table below)
+  - Shows emoji + label (e.g., "📝 Self Study Done")
+- Dynamic stats row (auto-computed from tasks):
+  - 📅 Last studied date
+  - 📝 Task count
+  - ⏱️ Total study minutes
 - Revisions needed/completed inputs
-- Date picker for last studied
 - Color-coded activity indicators
+
+### Chapter Status Colors (Both Modes)
+| Status | Background | Text | Border | Icon |
+|--------|-----------|------|--------|------|
+| Pending | `bg-gray-100` | `text-gray-600` | `border-gray-300` | 📋 |
+| Started | `bg-yellow-100` | `text-yellow-700` | `border-yellow-300` | 📖 |
+| Self Study Done | `bg-teal-100` | `text-teal-700` | `border-teal-300` | 📝 |
+| Reviewed | `bg-blue-100` | `text-blue-700` | `border-blue-300` | 🔍 |
+| Completed | `bg-green-100` | `text-green-700` | `border-green-300` | ✅ |
 
 ---
 
@@ -134,6 +147,28 @@ Based on last studied date:
 | 0-3 days | Green | Active |
 | 4-7 days | Yellow | Recent |
 | 8+ days | Gray | Inactive |
+
+---
+
+## Dynamic Task Linking
+
+In both Smart and Comprehensive modes, chapter cards now compute stats dynamically from the `tasks` array rather than relying on static fields stored in the chapter object:
+
+```javascript
+// Filter tasks matching this subject + chapter
+const chapterTasks = tasks.filter(t => 
+  t.subject === subject.name && t.chapter === chapterName
+);
+const dynamicTaskCount = chapterTasks.length;
+const dynamicStudyTime = chapterTasks.reduce(
+  (sum, t) => sum + (parseInt(t.duration) || 0), 0
+);
+const lastTask = chapterTasks.filter(t => t.completed)
+  .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+const dynamicLastStudied = lastTask ? lastTask.date : null;
+```
+
+This ensures task count, study time, and last-studied date always reflect actual task data.
 
 ---
 

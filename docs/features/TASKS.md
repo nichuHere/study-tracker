@@ -201,3 +201,4 @@ See [POINTS_SYSTEM.md](POINTS_SYSTEM.md) for full details.
 - [TASK_ROLLOVER.md](TASK_ROLLOVER.md) - Automatic task rollover
 - [SUBJECTS.md](SUBJECTS.md) - Subject/chapter for task creation
 - [POINTS_SYSTEM.md](POINTS_SYSTEM.md) - Task completion points
+- [ADMIN_MODE.md](ADMIN_MODE.md) - Backdate tasks via admin mode

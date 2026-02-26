@@ -35,6 +35,7 @@ Kannama Study Tracker is a family-focused study management application that help
 | Points & Leaderboard | Gamification system | [docs/features/POINTS_SYSTEM.md](features/POINTS_SYSTEM.md) |
 | Badges | Achievement badges | [docs/features/BADGES.md](features/BADGES.md) |
 | School Documents | Document upload & timetables | [docs/features/SCHOOL_DOCUMENTS.md](features/SCHOOL_DOCUMENTS.md) |
+| Admin Mode | Hidden parental controls with PIN access | [docs/features/ADMIN_MODE.md](features/ADMIN_MODE.md) |
 
 ---
 
@@ -149,6 +150,9 @@ Incomplete tasks automatically move to the current day, ensuring nothing is forg
 
 ### 6. Custom Hooks
 Business logic is extracted into reusable hooks (`useProfiles`, `useReminders`, `useDataLoader`).
+
+### 7. Hidden Admin Mode
+A secret admin mode accessed by tapping the app logo and entering a PIN. Allows parents to backdate tasks without exposing the option to children. Auto-exits after 10 minutes.
 
 ---
 

@@ -47,6 +47,12 @@
 - **Beautiful Gradients**: Modern purple/indigo color scheme
 - **Daily Suggestions**: AI-powered study recommendations
 
+### Parental Controls
+- **Admin Mode**: Hidden admin access via logo tap + PIN
+- **Task Backdating**: Move tasks to previous dates in admin mode
+- **Auto-Timeout**: Admin mode exits after 10 minutes
+- **Child-Safe**: No visible admin UI unless PIN is entered
+
 ---
 
 ## 🛠 Technology Stack
@@ -497,6 +503,13 @@ npm start
 - Preview images inline
 - Open PDFs in new tab
 
+### Admin Mode (Parental Controls)
+- **Access**: Tap the GraduationCap logo → enter PIN `0000`
+- **Backdate Tasks**: Each task shows a calendar icon to change its date
+- **Exit**: Tap logo again, tap Admin badge, or wait 10 minutes
+- **Invisible to Kids**: No menus, buttons, or settings hint at admin mode
+- See [ADMIN_MODE.md](features/ADMIN_MODE.md) for full spec
+
 ---
 
 ## 🔄 Updates & Maintenance
@@ -594,4 +607,4 @@ Features you have:
 
 ---
 
-*Last updated: February 4, 2026*
+*Last updated: February 26, 2026*

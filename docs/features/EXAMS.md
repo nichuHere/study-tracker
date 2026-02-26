@@ -41,8 +41,18 @@ Exam planning and preparation system for organizing upcoming tests. Each exam ca
 |-------|------|-------------|
 | subject | string | Subject name |
 | date | string | Exam date for this subject |
-| chapters | array | Chapter names to study |
+| chapters | array | Array of chapter objects (see below) |
 | keyPoints | string | Important notes/topics |
+
+### Exam Chapter (in chapters array)
+| Field | Type | Description |
+|-------|------|-------------|
+| name | string | Chapter name |
+| status | string | One of: `pending`, `started`, `self_study_done`, `reviewed`, `completed` |
+| revisionsNeeded | number | Number of revisions planned |
+| revisionsCompleted | number | Number of revisions done |
+| studyMode | string | Study approach: 'Full Portions', 'Key Topics Only', 'Custom' |
+| customStudyMode | string | Custom study mode description (when studyMode is 'Custom') |
 
 ---
 
@@ -58,12 +68,18 @@ Exam planning and preparation system for organizing upcoming tests. Each exam ca
    - Date required
    - Chapters and keyPoints are optional
 
-3. **Exam Visibility**:
+3. **Chapter Status Flow** (5 statuses):
+   - `pending` → `started` → `self_study_done` → `reviewed` → `completed`
+   - Status tracked per chapter within each exam subject
+   - Click-to-cycle button advances to next status
+   - Progress summary shows counts per status category
+
+4. **Exam Visibility**:
    - Upcoming: Subject date >= today
    - Past: All subject dates < today
    - Past exams hidden by default
 
-4. **Urgency Indicators**:
+5. **Urgency Indicators**:
    - Red badge: Exam within 3 days
    - Orange badge: Exam within 7 days
 
@@ -80,11 +96,24 @@ Exam planning and preparation system for organizing upcoming tests. Each exam ca
   - Subject list (when expanded)
   - Edit/Delete buttons
 
+### Chapter Status Colors
+| Status | Color | Icon | Label |
+|--------|-------|------|-------|
+| Pending | Gray (`bg-gray-100`) | 📋 | Pending |
+| Started | Yellow (`bg-yellow-100`) | 📖 | Started |
+| Self Study Done | Teal (`bg-teal-100`) | 📝 | Self Study Done |
+| Reviewed | Blue (`bg-blue-100`) | 🔍 | Reviewed |
+| Completed | Green (`bg-green-100`) | ✅ | Completed |
+
 ### Exam Card (Expanded)
 For each subject:
 - Subject name
 - Exam date
-- Chapters list (chips)
+- Chapters list with status badges (click-to-cycle)
+- Chapter progress bar (completed / total)
+- Status summary (counts per status)
+- Revisions needed/completed per chapter
+- Study mode per chapter
 - Key points text
 
 ### Add Exam Form

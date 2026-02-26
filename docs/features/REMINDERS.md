@@ -20,6 +20,7 @@ Reminder system supporting both one-time and recurring reminders. One-time remin
 - Reminders scoped to active profile
 - Recurring reminders show for matching days
 - Time displayed in 12-hour format
+- Reminders can be managed from both the Reminders section and the Calendar view
 
 ---
 
@@ -130,6 +131,23 @@ Checkboxes for:
 - Minimize/expand toggle
 - Dismiss button per reminder
 
+### Calendar View Integration
+Reminders can be added, edited, and deleted directly from the Calendar view:
+
+**Add Reminder from Calendar:**
+- Click a day on the calendar to open the selected day detail panel
+- Click the bell+plus button (top-right of panel) to open the add reminder form
+- Empty days show a prominent "Add a Reminder" button
+- Date is pre-filled to the selected calendar day
+- Supports both one-time (date pre-filled) and recurring (day-of-week pre-selected) types
+- Same form fields as the Reminders section
+
+**Edit/Delete from Calendar:**
+- Each reminder card in the selected day panel shows edit (pencil) and delete (trash) icons
+- Edit opens an inline form within the calendar panel (amber for one-time, blue for recurring)
+- Delete removes the reminder immediately
+- Uses the same `startEditReminder`, `startEditRecurringReminder`, `deleteReminder`, `deleteRecurringReminder` functions
+
 ---
 
 ## API Operations
@@ -230,6 +248,12 @@ Managed by `useReminders` custom hook:
 | showNotificationsDropdown | boolean | Dropdown visibility |
 | notificationsMinimized | boolean | Collapsed state |
 | dismissedNotifications | array | Dismissed reminder IDs |
+
+### Calendar Reminder State
+| State | Type | Description |
+|-------|------|-------------|
+| showCalendarAddReminder | boolean | Calendar add form visibility |
+| calendarReminderType | string | 'one-time' or 'recurring' (calendar form) |
 
 ---
 

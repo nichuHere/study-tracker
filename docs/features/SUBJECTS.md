@@ -45,7 +45,7 @@ Subject and chapter organization system for structuring study content. Each prof
 | revisionsNeeded | number | Revisions planned (comprehensive) |
 | revisionsCompleted | number | Revisions done (comprehensive) |
 | lastStudied | string | ISO date of last study (comprehensive) |
-| status | string | 'pending'/'started'/'completed' (comprehensive) |
+| status | string | 'pending'/'started'/'self_study_done'/'reviewed'/'completed' |
 
 ---
 
@@ -75,19 +75,19 @@ Subject and chapter organization system for structuring study content. Each prof
 | Field | Source |
 |-------|--------|
 | completed | User checkbox |
-| studyTime | Sum from completed tasks |
-| tasksCompleted | Count from completed tasks |
-| lastStudied | Auto-updated on task completion |
+| studyTime | Dynamically computed from tasks matching subject + chapter |
+| tasksCompleted | Dynamically counted from tasks matching subject + chapter |
+| lastStudied | Dynamically derived from most recent completed task |
 
 ### Comprehensive Mode
 | Field | Entry |
 |-------|-------|
-| status | Manual (pending/started/completed) |
-| studyTime | Manual input |
-| tasksCompleted | Manual input |
+| status | Click-to-cycle: pending → started → self_study_done → reviewed → completed |
+| studyTime | Dynamically computed from tasks |
+| tasksCompleted | Dynamically counted from tasks |
+| lastStudied | Dynamically derived from tasks |
 | revisionsNeeded | Manual input |
 | revisionsCompleted | Manual input |
-| lastStudied | Manual date picker |
 
 See [CHAPTER_TRACKING.md](CHAPTER_TRACKING.md) for full details.
 

@@ -242,11 +242,11 @@ const SchoolDocuments = ({ profileId }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-2">
-                  Select File (PNG, JPG, or PDF - Max 5MB)
+                  Select File (PNG, JPG, PDF, or Word Doc - Max 5MB)
                 </label>
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/jpg,application/pdf"
+                  accept="image/png,image/jpeg,image/jpg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onChange={handleFileUpload}
                   disabled={uploading}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"

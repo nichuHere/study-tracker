@@ -158,10 +158,10 @@ const StudyTrackerApp = ({ session }) => {
   const [examChapterInput, setExamChapterInput] = useState('');
   const [examChapterExamOnly, setExamChapterExamOnly] = useState(false);
   const [editingExam, setEditingExam] = useState(null);
-  const [minimizedExams, setMinimizedExams] = useState({});
+  const [_minimizedExams, setMinimizedExams] = useState({});
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [selectedSubjectIndex, setSelectedSubjectIndex] = useState(null);
-  const [editingCustomStudyMode, setEditingCustomStudyMode] = useState(null);
+  const [_editingCustomStudyMode, _setEditingCustomStudyMode] = useState(null);
   const [showPreviousExams, setShowPreviousExams] = useState(false);
   const [expandedReminders, setExpandedReminders] = useState({});
   const [viewingSubject, setViewingSubject] = useState(null);

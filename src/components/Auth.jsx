@@ -169,18 +169,18 @@ const Auth = () => {
 
         {/* Right side - Auth Form */}
         <div className="w-full animate-slide-in-right">
-          <div className="bg-white rounded-3xl shadow-[0_20px_70px_-10px_rgba(0,0,0,0.5)] p-8 md:p-10 border border-gray-100">
+          <div className="bg-white rounded-3xl shadow-[0_20px_70px_-10px_rgba(0,0,0,0.5)] p-5 sm:p-8 md:p-10 border border-gray-100">
             {/* Mobile branding */}
-            <div className="md:hidden mb-8 text-center">
+            <div className="md:hidden mb-6 sm:mb-8 text-center">
               <img 
                 src={BoyLogo} 
                 alt="Kannama Logo" 
-                className="w-36 h-36 object-contain mx-auto mb-4 drop-shadow-xl" 
+                className="w-28 h-28 sm:w-36 sm:h-36 object-contain mx-auto mb-3 sm:mb-4 drop-shadow-xl" 
               />
-              <h1 className="text-3xl font-extrabold text-gray-900">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
                 Kannama
               </h1>
-              <p className="text-base text-gray-600 font-medium mt-1">Study Tracker</p>
+              <p className="text-sm sm:text-base text-gray-600 font-medium mt-1">Study Tracker</p>
             </div>
 
             <div className="mb-7">

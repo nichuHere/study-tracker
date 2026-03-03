@@ -159,11 +159,11 @@ const SchoolDocuments = ({ profileId }) => {
     <div className="space-y-4">
       {/* Timetable Section - Always Visible */}
       {timetable && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Pin className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-xl font-semibold text-gray-500">Class Timetable</h2>
+              <Pin className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+              <h2 className="text-base sm:text-xl font-semibold text-gray-500">Class Timetable</h2>
             </div>
             <button
               onClick={() => deleteDocument(timetable.id)}
@@ -178,10 +178,10 @@ const SchoolDocuments = ({ profileId }) => {
       )}
 
       {/* Other Documents Button */}
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <button
           onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md text-sm sm:text-base"
         >
           <Upload className="w-4 h-4" />
           Upload School Document
@@ -190,7 +190,7 @@ const SchoolDocuments = ({ profileId }) => {
         {documents.length > 0 && (
           <button
             onClick={() => setShowDocumentsModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-md"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-md text-sm sm:text-base"
           >
             <FileText className="w-4 h-4" />
             View Documents ({documents.length})
@@ -201,9 +201,9 @@ const SchoolDocuments = ({ profileId }) => {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-500">Upload Document</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-500">Upload Document</h2>
               <button
                 onClick={() => setShowUploadModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -267,9 +267,9 @@ const SchoolDocuments = ({ profileId }) => {
       {/* Documents List Modal */}
       {showDocumentsModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-500">School Documents</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-500">School Documents</h2>
               <button
                 onClick={() => {
                   setShowDocumentsModal(false);

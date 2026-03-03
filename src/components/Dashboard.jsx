@@ -252,87 +252,87 @@ const Dashboard = ({
   }, [profiles, tasks, subjects, exams, leaderboardType]);
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
         
         {/* Header */}
-        <div className="glass-card rounded-2xl p-6 mb-8 shadow-glass">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+        <div className="glass-card rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 shadow-glass">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
             Dashboard
           </h1>
-          <p className="text-gray-700 font-medium">
+          <p className="text-gray-700 font-medium text-sm sm:text-base">
             Welcome back, {activeProfile?.name || 'Student'}! 👋
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
               
               {/* Completion Card */}
-              <div className="glass-card rounded-2xl p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-indigo-600">Completed</span>
-                  <CheckCircleIcon className="w-5 h-5 text-indigo-500" />
+              <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
+                <div className="flex items-center justify-between mb-1 sm:mb-2">
+                  <span className="text-[10px] sm:text-sm font-semibold text-indigo-600">Completed</span>
+                  <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500 hidden sm:block" />
                 </div>
-                <div className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                <div className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   {stats.completionRate}%
                 </div>
-                <p className="text-xs text-gray-600 mt-1 font-medium">
+                <p className="text-[9px] sm:text-xs text-gray-600 mt-1 font-medium">
                   {stats.completedToday}/{stats.totalToday} tasks today
                 </p>
               </div>
 
               {/* Subjects Card */}
-              <div className="glass-card rounded-2xl p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-purple-600">Today</span>
-                  <Clock className="w-5 h-5 text-purple-500" />
+              <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
+                <div className="flex items-center justify-between mb-1 sm:mb-2">
+                  <span className="text-[10px] sm:text-sm font-semibold text-purple-600">Today</span>
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 hidden sm:block" />
                 </div>
-                <div className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                  {Math.floor(stats.studyMinutesToday / 60)}<span className="text-2xl">.{Math.floor((stats.studyMinutesToday % 60) / 6)}</span>
+                <div className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  {Math.floor(stats.studyMinutesToday / 60)}<span className="text-lg sm:text-2xl">.{Math.floor((stats.studyMinutesToday % 60) / 6)}</span>
                 </div>
-                <p className="text-xs text-gray-600 mt-1 font-medium">
+                <p className="text-[9px] sm:text-xs text-gray-600 mt-1 font-medium">
                   hours studied today
                 </p>
               </div>
 
               {/* Study Hours Card */}
-              <div className="glass-card rounded-2xl p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-pink-600">This Week</span>
-                  <TrendingUp className="w-5 h-5 text-pink-500" />
+              <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-glass hover:shadow-glass-lg transition-all transform hover:scale-105">
+                <div className="flex items-center justify-between mb-1 sm:mb-2">
+                  <span className="text-[10px] sm:text-sm font-semibold text-pink-600">This Week</span>
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500 hidden sm:block" />
                 </div>
-                <div className="text-4xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
-                  {Math.floor(stats.studyMinutesWeek / 60)}<span className="text-2xl">h</span>
+                <div className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
+                  {Math.floor(stats.studyMinutesWeek / 60)}<span className="text-lg sm:text-2xl">h</span>
                 </div>
-                <p className="text-xs text-gray-600 mt-1 font-medium">
+                <p className="text-[9px] sm:text-xs text-gray-600 mt-1 font-medium">
                   {stats.studyMinutesWeek} mins total
                 </p>
               </div>
             </div>
 
             {/* Study Streak Section - Enhanced with Activity */}
-            <div className="glass-card rounded-2xl p-6 shadow-glass">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-gray-800">Study Streak</h2>
+            <div className="glass-card rounded-2xl p-4 sm:p-6 shadow-glass">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-base sm:text-lg font-bold text-gray-800">Study Streak</h2>
                 <Flame className="w-5 h-5 text-orange-500" />
               </div>
               
               {/* Main Streak Counter */}
-              <div className="flex items-center justify-center mb-6">
+              <div className="flex items-center justify-center mb-4 sm:mb-6">
                 <div className="relative">
                   <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-red-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
-                  <div className="relative bg-gradient-to-br from-orange-400 to-red-500 rounded-full p-8 shadow-lg">
-                    <Flame className="w-16 h-16 text-white" />
+                  <div className="relative bg-gradient-to-br from-orange-400 to-red-500 rounded-full p-5 sm:p-8 shadow-lg">
+                    <Flame className="w-10 h-10 sm:w-16 sm:h-16 text-white" />
                   </div>
                 </div>
-                <div className="ml-6">
-                  <div className="text-6xl font-semibold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
+                <div className="ml-4 sm:ml-6">
+                  <div className="text-4xl sm:text-6xl font-semibold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
                     {currentStreak}
                   </div>
                   <div className="text-sm font-semibold text-gray-600 mt-1">
@@ -376,9 +376,9 @@ const Dashboard = ({
                 <div className="grid grid-cols-7 gap-2">
                   {streakCalendar.map((day, idx) => (
                     <div key={idx} className="flex flex-col items-center gap-1">
-                      <div className="text-xs text-gray-500 font-medium">{day.dayName}</div>
+                      <div className="text-[10px] sm:text-xs text-gray-500 font-medium">{day.dayName}</div>
                       <div
-                        className={`w-12 h-12 rounded-lg flex items-center justify-center text-xs font-semibold transition-all hover:scale-105 ${
+                        className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-[10px] sm:text-xs font-semibold transition-all hover:scale-105 ${
                           day.hasActivity
                             ? day.isToday
                               ? 'bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-lg ring-2 ring-orange-300'
@@ -673,7 +673,7 @@ const Dashboard = ({
                 </div>
               )}
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-4 gap-2 sm:gap-4">
                 {allBadgesWithStatus.map((badge) => {
                   // Tier colors and labels
                   const tierConfig = {
@@ -700,18 +700,18 @@ const Dashboard = ({
                       </div>
                       
                       {/* Badge Icon */}
-                      <div className={`w-28 h-28 mx-auto mb-1 flex items-center justify-center transition-transform duration-200 ${
+                      <div className={`w-20 h-20 sm:w-28 sm:h-28 mx-auto mb-1 flex items-center justify-center transition-transform duration-200 ${
                         badge.special && badge.unlocked ? 'drop-shadow-lg' : ''
                       }`}>
                         <BadgeIcon
                           badgeId={BADGE_ID_MAP[badge.id] || badge.id}
                           state={badge.unlocked ? 'enabled' : 'disabled'}
-                          size={96}
+                          size={typeof window !== 'undefined' && window.innerWidth < 640 ? 64 : 96}
                           decorative={false}
                         />
                       </div>
                       
-                      <div className={`text-[10px] font-semibold mb-0.5 ${
+                      <div className={`text-[9px] sm:text-[10px] font-semibold mb-0.5 ${
                         badge.unlocked ? 'text-gray-500' : 'text-gray-500'
                       }`}>
                         {badge.name}
@@ -752,8 +752,8 @@ const Dashboard = ({
           </div>
 
           {/* Sidebar - Leaderboard */}
-          <div className="space-y-6">
-            <div className="glass-card rounded-2xl p-6 shadow-glass sticky top-6 z-10">
+          <div className="space-y-4 sm:space-y-6">
+            <div className="glass-card rounded-2xl p-4 sm:p-6 shadow-glass lg:sticky lg:top-6 z-10">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800">Leaderboard</h2>
                 <button

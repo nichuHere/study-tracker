@@ -279,11 +279,11 @@ const Onboarding = ({
       <div className="w-24 h-24 bg-gradient-to-br from-rose-400 to-purple-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl transform rotate-3 hover:rotate-0 transition-transform">
         <GraduationCap className="w-12 h-12 text-white" />
       </div>
-      <h1 className="text-3xl font-black bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-3">
+      <h1 className="text-2xl sm:text-3xl font-black bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-3">
         Welcome to Study Tracker!
       </h1>
-      <p className="text-gray-500 text-lg mb-2">Let's set things up in just a few quick steps</p>
-      <div className="flex items-center justify-center gap-3 mt-6 text-sm text-gray-400">
+      <p className="text-gray-500 text-base sm:text-lg mb-2">Let's set things up in just a few quick steps</p>
+      <div className="flex items-center justify-center gap-2 sm:gap-3 mt-6 text-xs sm:text-sm text-gray-400 flex-wrap">
         <span className="flex items-center gap-1">&#x1F4DA; Track studies</span>
         <span>&bull;</span>
         <span className="flex items-center gap-1">&#x1F3C6; Earn badges</span>
@@ -303,7 +303,7 @@ const Onboarding = ({
       <h2 className="text-2xl font-bold text-gray-800 mb-2">Who's setting this up?</h2>
       <p className="text-gray-500 mb-8">This helps personalise celebration messages</p>
 
-      <div className="flex gap-4 justify-center mb-4">
+      <div className="flex gap-3 sm:gap-4 justify-center mb-4">
         {[
           { type: 'mother', img: MotherDefault, accent: 'rose', label: 'Mother' },
           { type: 'father', img: FatherDefault, accent: 'indigo', label: 'Father' },
@@ -311,13 +311,13 @@ const Onboarding = ({
           <button
             key={type}
             onClick={() => setLocalParentType(type)}
-            className={`flex flex-col items-center gap-3 p-6 rounded-2xl border-2 transition-all transform hover:scale-105 w-36 ${
+            className={`flex flex-col items-center gap-2 sm:gap-3 p-4 sm:p-6 rounded-2xl border-2 transition-all transform hover:scale-105 w-28 sm:w-36 ${
               localParentType === type
                 ? `border-${accent}-400 bg-${accent}-50 shadow-lg scale-105`
                 : `border-gray-200 bg-white hover:border-${accent}-300`
             }`}
           >
-            <div className={`w-16 h-16 rounded-full overflow-hidden border-2 border-${accent}-200 shadow`}>
+            <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-${accent}-200 shadow`}>
               <img src={img} alt={label} className="w-full h-full object-cover" />
             </div>
             <span className="font-bold text-gray-700">{label}</span>
@@ -772,8 +772,8 @@ const Onboarding = ({
   };
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center p-4">
-      <div className="glass-card rounded-2xl shadow-glass-xl border border-white/40 p-8 w-full max-w-lg relative overflow-hidden">
+    <div className="min-h-[60vh] flex items-center justify-center p-2 sm:p-4">
+      <div className="glass-card rounded-2xl shadow-glass-xl border border-white/40 p-4 sm:p-8 w-full max-w-lg relative overflow-hidden">
         <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-rose-200/30 to-purple-200/30 rounded-full blur-3xl" />
         <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-br from-indigo-200/30 to-emerald-200/30 rounded-full blur-3xl" />
 

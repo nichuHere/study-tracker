@@ -140,7 +140,7 @@ const SchoolDocuments = ({ profileId }) => {
       return (
         <div className="bg-gray-50 rounded-lg p-8 text-center">
           <FileText className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-500 mb-4">{doc.file_name}</p>
+          <p className="text-gray-500 mb-4">{doc.description || doc.file_name}</p>
           <a
             href={doc.file_url}
             target="_blank"
@@ -229,7 +229,7 @@ const SchoolDocuments = ({ profileId }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-2">
-                  Description (Optional)
+                  Title <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -237,6 +237,7 @@ const SchoolDocuments = ({ profileId }) => {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="e.g., Science Lab Rules, Exam Schedule"
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  required
                 />
               </div>
 
@@ -289,9 +290,9 @@ const SchoolDocuments = ({ profileId }) => {
                 >
                   ← Back to list
                 </button>
-                <h3 className="font-semibold text-lg">{previewDocument.file_name}</h3>
+                <h3 className="font-semibold text-lg">{previewDocument.description || previewDocument.file_name}</h3>
                 {previewDocument.description && (
-                  <p className="text-gray-600">{previewDocument.description}</p>
+                  <p className="text-xs text-gray-400">{previewDocument.file_name}</p>
                 )}
                 {renderDocumentPreview(previewDocument)}
               </div>
@@ -308,11 +309,9 @@ const SchoolDocuments = ({ profileId }) => {
                       ) : (
                         <FileText className="w-5 h-5 text-red-600" />
                       )}
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-500">{doc.file_name}</p>
-                        {doc.description && (
-                          <p className="text-sm text-gray-500">{doc.description}</p>
-                        )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-800 truncate">{doc.description || doc.file_name}</p>
+                        <p className="text-xs text-gray-400 truncate">{doc.file_name}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

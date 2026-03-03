@@ -1,0 +1,15 @@
+{
+  "name": "studytracker-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for StudyTracker app - manage tasks, subjects, exams, and reminders via AI",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@supabase/supabase-js": "^2.49.4",
+    "dotenv": "^16.4.7"
+  }
+}

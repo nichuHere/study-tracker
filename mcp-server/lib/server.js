@@ -58,6 +58,7 @@ export function createMcpServer() {
     'list_profiles',
     'List all student profiles in the app',
     {},
+    { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async () => {
       const { data, error } = await supabase
         .from('profiles')
@@ -84,6 +85,7 @@ export function createMcpServer() {
       instructions: z.string().optional().describe('Additional instructions (optional)'),
       profile_name: z.string().optional().describe('Student name (optional, uses first profile if omitted)'),
     },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     async ({ subject, duration, date, chapter, activity, instructions, profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -112,6 +114,7 @@ export function createMcpServer() {
       profile_name: z.string().optional().describe('Student name (optional)'),
       include_completed: z.boolean().optional().default(false).describe('Include completed tasks'),
     },
+    { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ date, profile_name, include_completed }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -134,6 +137,7 @@ export function createMcpServer() {
     'complete_task',
     'Mark a task as completed',
     { task_id: z.number().describe('The task ID to mark as complete') },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     async ({ task_id }) => {
       const { data, error } = await supabase.from('tasks').update({ completed: true }).eq('id', task_id).select().single();
       if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] };
@@ -146,6 +150,7 @@ export function createMcpServer() {
     'delete_task',
     'Delete a task by ID',
     { task_id: z.number().describe('The task ID to delete') },
+    { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     async ({ task_id }) => {
       const { error } = await supabase.from('tasks').delete().eq('id', task_id);
       if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] };
@@ -158,6 +163,7 @@ export function createMcpServer() {
     'list_subjects',
     'List all subjects and their chapters for a student',
     { profile_name: z.string().optional().describe('Student name (optional)') },
+    { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -182,6 +188,7 @@ export function createMcpServer() {
       chapters: z.array(z.string()).optional().default([]).describe('List of chapter names (optional)'),
       profile_name: z.string().optional().describe('Student name (optional)'),
     },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     async ({ name, chapters, profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -202,6 +209,7 @@ export function createMcpServer() {
       description: z.string().optional().describe('Additional details (optional)'),
       profile_name: z.string().optional().describe('Student name (optional)'),
     },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     async ({ title, date, description, profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -219,6 +227,7 @@ export function createMcpServer() {
       date: z.string().optional().describe('Date in YYYY-MM-DD (default: today)'),
       profile_name: z.string().optional().describe('Student name (optional)'),
     },
+    { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ date, profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -248,6 +257,7 @@ export function createMcpServer() {
       description: z.string().optional().describe('Additional details (optional)'),
       profile_name: z.string().optional().describe('Student name (optional)'),
     },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     async ({ title, time, end_time, days, description, profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -264,6 +274,7 @@ export function createMcpServer() {
     'get_exams',
     'Get all exams for a student with subjects, dates, and chapter progress',
     { profile_name: z.string().optional().describe('Student name (optional)') },
+    { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };
@@ -288,6 +299,7 @@ export function createMcpServer() {
     'get_study_summary',
     "Get a summary of a student's study progress — tasks, subjects, upcoming exams",
     { profile_name: z.string().optional().describe('Student name (optional)') },
+    { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ profile_name }) => {
       const profile = await resolveProfileId(supabase, profile_name);
       if (!profile) return { content: [{ type: 'text', text: 'Profile not found.' }] };

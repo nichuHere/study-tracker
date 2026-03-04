@@ -10,10 +10,13 @@ import { z } from 'zod';
 function getSupabaseClient() {
   // Accept both naming conventions (local .env  vs  Vercel env vars)
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY;
+  // Prefer service role key (bypasses RLS — needed for server-side access)
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_ANON_KEY
+    || process.env.REACT_APP_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
-    throw new Error('Missing SUPABASE_URL / SUPABASE_ANON_KEY environment variables');
+    throw new Error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY environment variables');
   }
 
   return createClient(url, key);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 export const useProfiles = (session) => {
@@ -19,6 +19,56 @@ export const useProfiles = (session) => {
   const [editingProfile, setEditingProfile] = useState(null);
   const [editProfileData, setEditProfileData] = useState({ name: '', class: '', chapter_tracking_mode: 'smart', parent_name: '' });
   const [deletingProfileId, setDeletingProfileId] = useState(null);
+
+  // Helper: upsert a field in user_settings (syncs to database)
+  const upsertUserSetting = useCallback(async (fields) => {
+    if (!session?.user?.id) return;
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert(
+          { user_id: session.user.id, ...fields, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error saving user setting:', err);
+    }
+  }, [session]);
+
+  // Load user settings from database (parent photo, account name, parent type)
+  const loadUserSettings = useCallback(async () => {
+    if (!session?.user?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('account_name, parent_photo, parent_type')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+        console.error('Error loading user settings:', error);
+        return;
+      }
+
+      if (data) {
+        if (data.account_name) {
+          setAccountName(data.account_name);
+          localStorage.setItem('accountName', data.account_name);
+        }
+        if (data.parent_photo) {
+          setParentPhoto(data.parent_photo);
+          localStorage.setItem('parentPhoto', data.parent_photo);
+        }
+        if (data.parent_type) {
+          setParentTypeState(data.parent_type);
+          localStorage.setItem('parentType', data.parent_type);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading user settings:', err);
+    }
+  }, [session]);
 
   // Get a profile picture from the profiles array (stored in DB)
   const getProfilePic = (profileId) => {
@@ -85,21 +135,22 @@ export const useProfiles = (session) => {
     });
   };
 
-  // Load account name, parent photo, and parent type from localStorage
+  // Load from localStorage first (instant), then sync from DB (authoritative)
   useEffect(() => {
     const savedName = localStorage.getItem('accountName');
-    if (savedName) {
-      setAccountName(savedName);
-    }
+    if (savedName) setAccountName(savedName);
     const savedPhoto = localStorage.getItem('parentPhoto');
-    if (savedPhoto) {
-      setParentPhoto(savedPhoto);
-    }
+    if (savedPhoto) setParentPhoto(savedPhoto);
     const savedType = localStorage.getItem('parentType');
-    if (savedType) {
-      setParentTypeState(savedType);
-    }
+    if (savedType) setParentTypeState(savedType);
   }, []);
+
+  // Load from database when session is available (overrides localStorage with DB values)
+  useEffect(() => {
+    if (session?.user?.id) {
+      loadUserSettings();
+    }
+  }, [session, loadUserSettings]);
 
   // Load profiles
   const loadProfiles = async () => {
@@ -351,29 +402,33 @@ export const useProfiles = (session) => {
     }
   };
 
-  // Save account name
+  // Save account name (to DB + localStorage)
   const saveAccountName = () => {
     localStorage.setItem('accountName', tempAccountName);
     setAccountName(tempAccountName);
     setEditingAccountName(false);
+    upsertUserSetting({ account_name: tempAccountName });
   };
 
-  // Set parent type (mother/father)
+  // Set parent type (mother/father) — synced to DB
   const setParentType = (type) => {
     localStorage.setItem('parentType', type);
     setParentTypeState(type);
+    upsertUserSetting({ parent_type: type });
   };
 
-  // Save parent photo (for celebration display)
+  // Save parent photo (for celebration display) — synced to DB
   const saveParentPhoto = (base64) => {
     localStorage.setItem('parentPhoto', base64);
     setParentPhoto(base64);
+    upsertUserSetting({ parent_photo: base64 });
   };
 
-  // Remove parent photo
+  // Remove parent photo — synced to DB
   const removeParentPhoto = () => {
     localStorage.removeItem('parentPhoto');
     setParentPhoto(null);
+    upsertUserSetting({ parent_photo: null });
   };
 
   // Handle parent photo file upload

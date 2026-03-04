@@ -22,21 +22,25 @@ export const useProfiles = (session) => {
 
   // Helper: upsert a field in user_settings (syncs to database)
   const upsertUserSetting = useCallback(async (fields) => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) {
+      console.warn('upsertUserSetting: no session, skipping DB save', fields);
+      return;
+    }
     try {
-      const { error } = await supabase
+      const payload = { user_id: session.user.id, ...fields, updated_at: new Date().toISOString() };
+      const { data, error } = await supabase
         .from('user_settings')
-        .upsert(
-          { user_id: session.user.id, ...fields, updated_at: new Date().toISOString() },
-          { onConflict: 'user_id' }
-        );
+        .upsert(payload, { onConflict: 'user_id' })
+        .select();
       if (error) throw error;
+      console.log('✅ User setting saved to DB:', Object.keys(fields), data);
     } catch (err) {
-      console.error('Error saving user setting:', err);
+      console.error('Error saving user setting:', err, 'Fields:', fields);
     }
   }, [session]);
 
   // Load user settings from database (parent photo, account name, parent type)
+  // If no DB row exists yet, migrate existing localStorage data into it
   const loadUserSettings = useCallback(async () => {
     if (!session?.user?.id) return;
     try {
@@ -52,6 +56,7 @@ export const useProfiles = (session) => {
       }
 
       if (data) {
+        // DB row exists — use DB values (authoritative source)
         if (data.account_name) {
           setAccountName(data.account_name);
           localStorage.setItem('accountName', data.account_name);
@@ -63,6 +68,32 @@ export const useProfiles = (session) => {
         if (data.parent_type) {
           setParentTypeState(data.parent_type);
           localStorage.setItem('parentType', data.parent_type);
+        }
+      } else {
+        // No DB row yet — migrate existing localStorage data into the database
+        const localName = localStorage.getItem('accountName');
+        const localPhoto = localStorage.getItem('parentPhoto');
+        const localType = localStorage.getItem('parentType');
+
+        if (localName || localPhoto || localType) {
+          console.log('Migrating user settings from localStorage to database...');
+          const migrateData = {
+            user_id: session.user.id,
+            updated_at: new Date().toISOString()
+          };
+          if (localName) migrateData.account_name = localName;
+          if (localPhoto) migrateData.parent_photo = localPhoto;
+          if (localType) migrateData.parent_type = localType;
+
+          const { error: insertError } = await supabase
+            .from('user_settings')
+            .insert(migrateData);
+
+          if (insertError) {
+            console.error('Error migrating user settings:', insertError);
+          } else {
+            console.log('✅ User settings migrated to database successfully');
+          }
         }
       }
     } catch (err) {
